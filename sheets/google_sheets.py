@@ -1,12 +1,12 @@
 """
 Google Sheets — OAuth2 autentifikatsiya
-Service Account o'rniga OAuth2 ishlatiladi
+Railway uchun TOKEN_PICKLE_BASE64 environment variable dan o'qiydi
 """
 
 import os
 import pickle
+import base64
 import gspread
-from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from datetime import datetime, date, timedelta
@@ -43,18 +43,41 @@ CLIENT_HEADERS = [
 def get_sheets_client():
     """OAuth2 orqali Google Sheets clientini qaytaradi"""
     creds = None
-    if os.path.exists(TOKEN_FILE):
+
+    # 1. Environment variable dan token o'qish (Railway uchun)
+    token_b64 = os.getenv("TOKEN_PICKLE_BASE64")
+    if token_b64:
+        try:
+            # BEGIN/END CERTIFICATE qatorlarini tozalash
+            clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "")
+            clean = clean.replace("-----END CERTIFICATE-----", "")
+            clean = clean.replace("\r\n", "").replace("\n", "").replace(" ", "")
+            token_bytes = base64.b64decode(clean)
+            creds = pickle.loads(token_bytes)
+        except Exception as e:
+            print(f"Token o'qishda xato: {e}")
+
+    # 2. Lokal token.pickle dan o'qish
+    if creds is None and os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "rb") as f:
             creds = pickle.load(f)
 
+    # 3. Token yangilash yoki yangi login
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-        else:
+            # Yangilangan tokenni saqlash
+            with open(TOKEN_FILE, "wb") as f:
+                pickle.dump(creds, f)
+        elif os.path.exists(CREDENTIALS_FILE):
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open(TOKEN_FILE, "wb") as f:
-            pickle.dump(creds, f)
+            with open(TOKEN_FILE, "wb") as f:
+                pickle.dump(creds, f)
+        else:
+            raise Exception(
+                "Token topilmadi! TOKEN_PICKLE_BASE64 yoki credentials.json kerak."
+            )
 
     return gspread.authorize(creds)
 
@@ -153,7 +176,7 @@ def record_payment(phone: str, amount: float) -> dict:
                 row_index = i
                 break
     if not target_row:
-        return {"success": False, "error": "Mijoz topilmadi yoki qarzi yo'q"}
+        return {"success": False, "error": "Mijoz topilmadi yoki qarzi yoq"}
     old_remaining = float(target_row.get("Qoldiq", 0))
     new_remaining = max(0, old_remaining - amount)
     today = date.today()
@@ -163,7 +186,7 @@ def record_payment(phone: str, amount: float) -> dict:
     ws_sales.update_cell(row_index, 12, next_date.strftime("%d.%m.%Y"))
     if new_remaining == 0:
         ws_sales.update_cell(row_index, 14, "Yopildi")
-        ws_sales.update_cell(row_index, 15, "🟢 A'lo")
+        ws_sales.update_cell(row_index, 15, "🟢 Alo")
     current_bonus = float(target_row.get("Kredit Bonusu", 0))
     new_bonus = current_bonus + 15000
     ws_sales.update_cell(row_index, 18, new_bonus)
@@ -180,7 +203,7 @@ def update_rating(ws, row_index, today, record):
     try:
         next_pay = datetime.strptime(record.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y").date()
         days_diff = (today - next_pay).days
-        rating = "🟢 A'lo" if days_diff <= 0 else ("🟡 O'rtacha" if days_diff <= 2 else "🔴 Xavfli")
+        rating = "🟢 Alo" if days_diff <= 0 else ("🟡 Ortacha" if days_diff <= 2 else "🔴 Xavfli")
         ws.update_cell(row_index, 15, rating)
     except:
         pass
