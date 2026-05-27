@@ -1,6 +1,5 @@
 """
 TexnoVibe Nasiya Bot — Asosiy fayl
-Barcha handlerlar shu yerda yig'ilgan
 """
 
 import logging
@@ -31,6 +30,10 @@ from handlers.auction_handler import (
     AUCTION_SETUP, AUCTION_BID
 )
 from handlers.admin_handler import cmd_export, cmd_backup
+from handlers.cancel_sale_handler import (
+    start_cancel, cancel_search, cancel_confirm, cancel_cmd,
+    CANCEL_SEARCH, CANCEL_CONFIRM
+)
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -46,7 +49,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # === SAVDO KIRITISH CONVERSATION ===
+    # === SAVDO KIRITISH ===
     sale_conv = ConversationHandler(
         entry_points=[CommandHandler("savdo", start_sale)],
         states={
@@ -63,7 +66,7 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === TO'LOV QABUL QILISH CONVERSATION ===
+    # === TO'LOV QABUL QILISH ===
     payment_conv = ConversationHandler(
         entry_points=[CommandHandler("tolov", start_payment)],
         states={
@@ -74,7 +77,17 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === AUKSION CONVERSATION ===
+    # === SAVDONI BEKOR QILISH ===
+    cancel_sale_conv = ConversationHandler(
+        entry_points=[CommandHandler("bekorqilish", start_cancel)],
+        states={
+            CANCEL_SEARCH: [MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search)],
+            CANCEL_CONFIRM: [CallbackQueryHandler(cancel_confirm)],
+        },
+        fallbacks=[CommandHandler("bekor", cancel_cmd)],
+    )
+
+    # === AUKSION ===
     auction_conv = ConversationHandler(
         entry_points=[CommandHandler("auksion", start_auction)],
         states={
@@ -84,9 +97,9 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === ODDIY COMMANDLAR ===
     app.add_handler(sale_conv)
     app.add_handler(payment_conv)
+    app.add_handler(cancel_sale_conv)
     app.add_handler(auction_conv)
 
     app.add_handler(CommandHandler("start", cmd_start))
@@ -102,7 +115,6 @@ def main():
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
 
-    # Scheduler (kunlik eslatmalar)
     setup_scheduler(app)
 
     logger.info("✅ TexnoVibe Bot ishga tushdi!")
@@ -115,6 +127,7 @@ async def cmd_start(update, context):
         "📋 *Asosiy buyruqlar:*\n"
         "➕ /savdo — Yangi savdo kiritish\n"
         "💰 /tolov — To'lov qabul qilish\n"
+        "❌ /bekorqilish — Savdoni bekor qilish\n"
         "📅 /bugun — Bugungi to'lovlar\n"
         "👥 /mijozlar — Mijozlar ro'yxati\n"
         "📊 /statistika — Umumiy statistika\n\n"
