@@ -1,11 +1,11 @@
 """
 TexnoVibe Nasiya Bot — Asosiy fayl
-Admin va Mijoz panel ajratilgan
+Admin va Mijoz uchun alohida keyboard menyu
 """
 
 import logging
 import os
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler, filters
@@ -54,12 +54,37 @@ def is_admin(user_id: int) -> bool:
     return user_id == ADMIN_CHAT_ID
 
 
+def get_admin_keyboard():
+    """Admin uchun pastki menyu"""
+    keyboard = [
+        [KeyboardButton("➕ Yangi Savdo"), KeyboardButton("💰 To'lov Qabul")],
+        [KeyboardButton("❌ Bekor Qilish"), KeyboardButton("📅 Bugungi To'lovlar")],
+        [KeyboardButton("👥 Mijozlar"), KeyboardButton("📊 Statistika")],
+        [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
+        [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
+        [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+def get_client_keyboard():
+    """Mijoz uchun pastki menyu"""
+    keyboard = [
+        [KeyboardButton("📊 Mening Kreditim")],
+        [KeyboardButton("📝 Ro'yxatdan O'tish")],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # === SAVDO KIRITISH (faqat admin) ===
+    # === SAVDO KIRITISH ===
     sale_conv = ConversationHandler(
-        entry_points=[CommandHandler("savdo", start_sale)],
+        entry_points=[
+            CommandHandler("savdo", start_sale),
+            MessageHandler(filters.Regex("^➕ Yangi Savdo$"), start_sale),
+        ],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
             PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
@@ -74,9 +99,12 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === TO'LOV QABUL QILISH (faqat admin) ===
+    # === TO'LOV QABUL QILISH ===
     payment_conv = ConversationHandler(
-        entry_points=[CommandHandler("tolov", start_payment)],
+        entry_points=[
+            CommandHandler("tolov", start_payment),
+            MessageHandler(filters.Regex("^💰 To'lov Qabul$"), start_payment),
+        ],
         states={
             PAY_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone)],
             PAY_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, payment_amount)],
@@ -85,9 +113,12 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === SAVDONI BEKOR QILISH (faqat admin) ===
+    # === SAVDONI BEKOR QILISH ===
     cancel_sale_conv = ConversationHandler(
-        entry_points=[CommandHandler("bekorqilish", start_cancel)],
+        entry_points=[
+            CommandHandler("bekorqilish", start_cancel),
+            MessageHandler(filters.Regex("^❌ Bekor Qilish$"), start_cancel),
+        ],
         states={
             CANCEL_SEARCH: [MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search)],
             CANCEL_CONFIRM: [CallbackQueryHandler(cancel_confirm)],
@@ -95,9 +126,12 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel_cmd)],
     )
 
-    # === AUKSION (faqat admin) ===
+    # === AUKSION ===
     auction_conv = ConversationHandler(
-        entry_points=[CommandHandler("auksion", start_auction)],
+        entry_points=[
+            CommandHandler("auksion", start_auction),
+            MessageHandler(filters.Regex("^🎯 Auksion$"), start_auction),
+        ],
         states={
             AUCTION_SETUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, auction_bid)],
             AUCTION_BID: [CallbackQueryHandler(auction_bid)],
@@ -110,10 +144,24 @@ def main():
     app.add_handler(cancel_sale_conv)
     app.add_handler(auction_conv)
 
-    # Start — admin yoki mijoz
+    # Start
     app.add_handler(CommandHandler("start", cmd_start))
 
-    # === ADMIN BUYRUQLARI ===
+    # === ADMIN TUGMA HANDLERLARI ===
+    app.add_handler(MessageHandler(filters.Regex("^📅 Bugungi To'lovlar$"), cmd_today))
+    app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar$"), cmd_clients))
+    app.add_handler(MessageHandler(filters.Regex("^📊 Statistika$"), cmd_stats))
+    app.add_handler(MessageHandler(filters.Regex("^⚠️ Qarzdorlar$"), cmd_debtors))
+    app.add_handler(MessageHandler(filters.Regex("^🚫 Qora Ro'yxat$"), cmd_blacklist))
+    app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
+    app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_export))
+    app.add_handler(MessageHandler(filters.Regex("^🔍 Qidirish$"), cmd_search_prompt))
+
+    # === MIJOZ TUGMA HANDLERLARI ===
+    app.add_handler(MessageHandler(filters.Regex("^📊 Mening Kreditim$"), cmd_mening_malumotlarim))
+    app.add_handler(MessageHandler(filters.Regex("^📝 Ro'yxatdan O'tish$"), cmd_register_prompt))
+
+    # === BUYRUQLAR ===
     app.add_handler(CommandHandler("tarix", cmd_history))
     app.add_handler(CommandHandler("qidir", cmd_search))
     app.add_handler(CommandHandler("qarzdorlar", cmd_debtors))
@@ -125,8 +173,6 @@ def main():
     app.add_handler(CommandHandler("eksport", cmd_export))
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
-
-    # === MIJOZ BUYRUQLARI ===
     app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))
     app.add_handler(CommandHandler("royhattan_otish", cmd_register))
 
@@ -140,44 +186,49 @@ async def cmd_start(update: Update, context):
     user_id = update.effective_user.id
 
     if is_admin(user_id):
-        # Admin paneli
         text = (
             "🏪 *TexnoVibe Nasiya Bot — Admin Panel*\n\n"
-            "📋 *Savdo:*\n"
-            "➕ /savdo — Yangi savdo kiritish\n"
-            "💰 /tolov — To'lov qabul qilish\n"
-            "❌ /bekorqilish — Savdoni bekor qilish\n\n"
-            "📊 *Hisobotlar:*\n"
-            "📅 /bugun — Bugungi to'lovlar\n"
-            "👥 /mijozlar — Barcha mijozlar\n"
-            "📊 /statistika — Umumiy statistika\n"
-            "⚠️ /qarzdorlar — Kechikayotganlar\n"
-            "🚫 /qoralist — Qora ro'yxat\n"
-            "⭐ /reyting — Mijozlar reytingi\n\n"
-            "🔍 *Qidirish:*\n"
-            "/tarix [telefon] — To'lov tarixi\n"
-            "/qidir [ism/telefon] — Mijoz qidirish\n\n"
-            "🎯 *Boshqa:*\n"
-            "/auksion — Auksion boshlash\n"
-            "/eksport — Excel eksport\n"
-            "/backup — Zaxira nusxa\n"
+            "Quyidagi tugmalardan foydalaning 👇"
+        )
+        await update.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=get_admin_keyboard()
         )
     else:
-        # Mijoz paneli
         text = (
             "🏪 *TexnoVibe Nasiya Bot*\n\n"
-            "Assalomu alaykum! 👋\n\n"
-            "📋 *Mening buyruqlarim:*\n"
-            "📊 /mening\\_malumotlarim — Mening kreditim\n"
-            "📝 /royhattan\\_otish — Ro'yxatdan o'tish\n\n"
-            "💡 *Xizmatlar:*\n"
-            "• To'lov kuni eslatma olasiz\n"
-            "• Qoldiq summangizni ko'rasiz\n"
-            "• To'lov tarixingizni ko'rasiz\n\n"
-            "📞 Savol bo'lsa do'konimizga murojaat qiling!"
+            "Assalomu alaykum! 👋\n"
+            "Quyidagi tugmalardan foydalaning 👇"
+        )
+        await update.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=get_client_keyboard()
         )
 
-    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def cmd_search_prompt(update: Update, context):
+    """Qidirish tugmasi bosilganda"""
+    await update.message.reply_text(
+        "🔍 *Qidirish*\n\n"
+        "Ism yoki telefon bo'yicha:\n"
+        "`/qidir Anvarov`\n"
+        "`/qidir +998901234567`\n\n"
+        "To'lov tarixi:\n"
+        "`/tarix +998901234567`",
+        parse_mode="Markdown"
+    )
+
+
+async def cmd_register_prompt(update: Update, context):
+    """Ro'yxatdan o'tish tugmasi bosilganda"""
+    await update.message.reply_text(
+        "📝 *Royxatdan otish*\n\n"
+        "Telefon raqamingizni yozing:\n"
+        "`/royhattan_otish +998901234567`",
+        parse_mode="Markdown"
+    )
 
 
 if __name__ == "__main__":
