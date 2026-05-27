@@ -169,8 +169,13 @@ def record_payment(phone: str, amount: float) -> dict:
     records = ws_sales.get_all_records()
     target_row = None
     row_index = None
+    def clean_phone(p):
+        return str(p).replace("+", "").replace(" ", "").replace("-", "").strip()
+
+    phone_clean = clean_phone(phone)
+
     for i, rec in enumerate(records, start=2):
-        if str(rec.get("Telefon", "")).replace(" ", "") == str(phone).replace(" ", ""):
+        if clean_phone(rec.get("Telefon", "")) == phone_clean:
             if rec.get("Holat") == "Faol":
                 target_row = rec
                 row_index = i
