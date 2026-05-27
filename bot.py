@@ -1,9 +1,11 @@
 """
 TexnoVibe Nasiya Bot — Asosiy fayl
+Admin va Mijoz panel ajratilgan
 """
 
 import logging
 import os
+from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ConversationHandler, filters
@@ -34,6 +36,7 @@ from handlers.cancel_sale_handler import (
     start_cancel, cancel_search, cancel_confirm, cancel_cmd,
     CANCEL_SEARCH, CANCEL_CONFIRM
 )
+from handlers.client_panel import cmd_mening_malumotlarim, cmd_register
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -44,12 +47,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_CHAT_ID
 
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # === SAVDO KIRITISH ===
+    # === SAVDO KIRITISH (faqat admin) ===
     sale_conv = ConversationHandler(
         entry_points=[CommandHandler("savdo", start_sale)],
         states={
@@ -66,7 +74,7 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === TO'LOV QABUL QILISH ===
+    # === TO'LOV QABUL QILISH (faqat admin) ===
     payment_conv = ConversationHandler(
         entry_points=[CommandHandler("tolov", start_payment)],
         states={
@@ -77,7 +85,7 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel)],
     )
 
-    # === SAVDONI BEKOR QILISH ===
+    # === SAVDONI BEKOR QILISH (faqat admin) ===
     cancel_sale_conv = ConversationHandler(
         entry_points=[CommandHandler("bekorqilish", start_cancel)],
         states={
@@ -87,7 +95,7 @@ def main():
         fallbacks=[CommandHandler("bekor", cancel_cmd)],
     )
 
-    # === AUKSION ===
+    # === AUKSION (faqat admin) ===
     auction_conv = ConversationHandler(
         entry_points=[CommandHandler("auksion", start_auction)],
         states={
@@ -102,7 +110,10 @@ def main():
     app.add_handler(cancel_sale_conv)
     app.add_handler(auction_conv)
 
+    # Start — admin yoki mijoz
     app.add_handler(CommandHandler("start", cmd_start))
+
+    # === ADMIN BUYRUQLARI ===
     app.add_handler(CommandHandler("tarix", cmd_history))
     app.add_handler(CommandHandler("qidir", cmd_search))
     app.add_handler(CommandHandler("qarzdorlar", cmd_debtors))
@@ -115,34 +126,57 @@ def main():
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
 
+    # === MIJOZ BUYRUQLARI ===
+    app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))
+    app.add_handler(CommandHandler("royhattan_otish", cmd_register))
+
     setup_scheduler(app)
 
     logger.info("✅ TexnoVibe Bot ishga tushdi!")
     app.run_polling(drop_pending_updates=True)
 
 
-async def cmd_start(update, context):
-    text = (
-        "🏪 *TexnoVibe Nasiya Bot*\n\n"
-        "📋 *Asosiy buyruqlar:*\n"
-        "➕ /savdo — Yangi savdo kiritish\n"
-        "💰 /tolov — To'lov qabul qilish\n"
-        "❌ /bekorqilish — Savdoni bekor qilish\n"
-        "📅 /bugun — Bugungi to'lovlar\n"
-        "👥 /mijozlar — Mijozlar ro'yxati\n"
-        "📊 /statistika — Umumiy statistika\n\n"
-        "🔍 *Qidirish:*\n"
-        "/tarix [telefon] — To'lov tarixi\n"
-        "/qidir [ism yoki telefon] — Mijoz qidirish\n\n"
-        "⚠️ *Hisobot:*\n"
-        "/qarzdorlar — Kechikayotganlar\n"
-        "/qoralist — Qora ro'yxat (3+ kun)\n"
-        "/reyting — Mijozlar reytingi\n\n"
-        "🎯 *Boshqa:*\n"
-        "/auksion — Auksion boshlash\n"
-        "/eksport — Excel eksport\n"
-        "/backup — Zaxira nusxa\n"
-    )
+async def cmd_start(update: Update, context):
+    user_id = update.effective_user.id
+
+    if is_admin(user_id):
+        # Admin paneli
+        text = (
+            "🏪 *TexnoVibe Nasiya Bot — Admin Panel*\n\n"
+            "📋 *Savdo:*\n"
+            "➕ /savdo — Yangi savdo kiritish\n"
+            "💰 /tolov — To'lov qabul qilish\n"
+            "❌ /bekorqilish — Savdoni bekor qilish\n\n"
+            "📊 *Hisobotlar:*\n"
+            "📅 /bugun — Bugungi to'lovlar\n"
+            "👥 /mijozlar — Barcha mijozlar\n"
+            "📊 /statistika — Umumiy statistika\n"
+            "⚠️ /qarzdorlar — Kechikayotganlar\n"
+            "🚫 /qoralist — Qora ro'yxat\n"
+            "⭐ /reyting — Mijozlar reytingi\n\n"
+            "🔍 *Qidirish:*\n"
+            "/tarix [telefon] — To'lov tarixi\n"
+            "/qidir [ism/telefon] — Mijoz qidirish\n\n"
+            "🎯 *Boshqa:*\n"
+            "/auksion — Auksion boshlash\n"
+            "/eksport — Excel eksport\n"
+            "/backup — Zaxira nusxa\n"
+        )
+    else:
+        # Mijoz paneli
+        text = (
+            "🏪 *TexnoVibe Nasiya Bot*\n\n"
+            "Assalomu alaykum! 👋\n\n"
+            "📋 *Mening buyruqlarim:*\n"
+            "📊 /mening\\_malumotlarim — Mening kreditim\n"
+            "📝 /royhattan\\_otish — Ro'yxatdan o'tish\n\n"
+            "💡 *Xizmatlar:*\n"
+            "• To'lov kuni eslatma olasiz\n"
+            "• Qoldiq summangizni ko'rasiz\n"
+            "• To'lov tarixingizni ko'rasiz\n\n"
+            "📞 Savol bo'lsa do'konimizga murojaat qiling!"
+        )
+
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
