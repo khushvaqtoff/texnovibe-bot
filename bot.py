@@ -93,41 +93,50 @@ def main():
         ],
         states={
             NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_name),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_name),
             ],
             PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
-                CallbackQueryHandler(get_payment_type),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_payment_type),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
             ],
             PRODUCT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_product),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_product),
             ],
             TOTAL_PRICE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_total_price),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_total_price),
             ],
             PAYMENT_TYPE: [
-                CallbackQueryHandler(get_payment_type),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_payment_type),
             ],
             INSTALLMENT_PERIOD: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_installment_period),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_installment_period),
             ],
             DOWN_PAYMENT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
             ],
             AGENT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_agent),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_agent),
             ],
             CONFIRM: [
-                CallbackQueryHandler(confirm_sale),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(confirm_sale),
             ],
         },
         fallbacks=[
@@ -147,16 +156,19 @@ def main():
         ],
         states={
             PAY_PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone),
             ],
             PAY_AMOUNT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, payment_amount),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, payment_amount),
             ],
             PAY_CONFIRM: [
-                CallbackQueryHandler(payment_confirm),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(payment_confirm),
             ],
         },
         fallbacks=[
@@ -176,12 +188,14 @@ def main():
         ],
         states={
             CANCEL_SEARCH: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search),
+                MessageHandler(home_filter, cancel_cmd),
                 MessageHandler(bekor_filter, cancel_cmd),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search),
             ],
             CANCEL_CONFIRM: [
-                CallbackQueryHandler(cancel_confirm),
+                MessageHandler(home_filter, cancel_cmd),
                 MessageHandler(bekor_filter, cancel_cmd),
+                CallbackQueryHandler(cancel_confirm),
             ],
         },
         fallbacks=[
@@ -201,12 +215,14 @@ def main():
         ],
         states={
             AUCTION_SETUP: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, auction_bid),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, auction_bid),
             ],
             AUCTION_BID: [
-                CallbackQueryHandler(auction_bid),
+                MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(auction_bid),
             ],
         },
         fallbacks=[
