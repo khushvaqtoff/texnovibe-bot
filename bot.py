@@ -36,7 +36,11 @@ from handlers.cancel_sale_handler import (
     start_cancel, cancel_search, cancel_confirm, cancel_cmd,
     CANCEL_SEARCH, CANCEL_CONFIRM
 )
-from handlers.client_panel import cmd_mening_malumotlarim, cmd_register
+from handlers.client_panel import (
+    cmd_mening_malumotlarim, cmd_register,
+    start_register, register_phone, cancel_register,
+    REGISTER_PHONE
+)
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -234,6 +238,27 @@ def main():
         conversation_timeout=300,
     )
 
+    # === ROYXATDAN OTISH (mijoz) ===
+    register_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^📝 Ro'yxatdan O'tish$"), start_register),
+            CommandHandler("royhattan_otish", start_register),
+        ],
+        states={
+            REGISTER_PHONE: [
+                MessageHandler(home_filter, cancel_register),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_phone),
+            ],
+        },
+        fallbacks=[
+            CommandHandler("bekor", cancel_register),
+            CommandHandler("start", cancel_register),
+            MessageHandler(home_filter, cancel_register),
+        ],
+        conversation_timeout=300,
+    )
+
+    app.add_handler(register_conv)
     app.add_handler(sale_conv)
     app.add_handler(payment_conv)
     app.add_handler(cancel_sale_conv)
@@ -257,7 +282,7 @@ def main():
 
     # === MIJOZ TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Kreditim$"), cmd_mening_malumotlarim))
-    app.add_handler(MessageHandler(filters.Regex("^📝 Ro'yxatdan O'tish$"), cmd_register_prompt))
+
 
     # === BUYRUQLAR ===
     app.add_handler(CommandHandler("tarix", cmd_history))
@@ -272,7 +297,6 @@ def main():
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
     app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))
-    app.add_handler(CommandHandler("royhattan_otish", cmd_register))
 
     setup_scheduler(app)
 
