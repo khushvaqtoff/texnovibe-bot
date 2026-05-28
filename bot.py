@@ -47,6 +47,10 @@ from handlers.catalog_handler import (
     cat_get_desc, cat_confirm, cmd_catalog, cmd_remove_product,
     CAT_NAME, CAT_PRICE, CAT_DESC, CAT_CONFIRM
 )
+from handlers.order_handler import (
+    start_order, order_select, order_confirm, cancel_order,
+    ORDER_SELECT, ORDER_CONFIRM
+)
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -85,6 +89,7 @@ def get_client_keyboard():
         [KeyboardButton("📊 Mening Kreditim")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
         [KeyboardButton("🛍 Katalog")],
+        [KeyboardButton("🛒 Buyurtma Berish")],
         [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -303,6 +308,31 @@ def main():
         conversation_timeout=300,
     )
     app.add_handler(catalog_add_conv)
+
+    # === BUYURTMA BERISH (mijoz) ===
+    order_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^🛒 Buyurtma Berish$"), start_order),
+            CommandHandler("buyurtma", start_order),
+        ],
+        states={
+            ORDER_SELECT: [
+                CallbackQueryHandler(order_select),
+                MessageHandler(home_filter, cancel_order),
+            ],
+            ORDER_CONFIRM: [
+                CallbackQueryHandler(order_confirm),
+                MessageHandler(home_filter, cancel_order),
+            ],
+        },
+        fallbacks=[
+            CommandHandler("bekor", cancel_order),
+            CommandHandler("start", cancel_order),
+            MessageHandler(home_filter, cancel_order),
+        ],
+        conversation_timeout=300,
+    )
+    app.add_handler(order_conv)
 
     # === QIDIRISH CONVERSATION ===
     search_conv = ConversationHandler(

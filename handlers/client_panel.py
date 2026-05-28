@@ -24,6 +24,8 @@ def get_client_keyboard():
     keyboard = [
         [KeyboardButton("📊 Mening Kreditim")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
+        [KeyboardButton("🛍 Katalog")],
+        [KeyboardButton("🛒 Buyurtma Berish")],
         [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
