@@ -63,6 +63,7 @@ def get_admin_keyboard():
         [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
         [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
         [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
+        [KeyboardButton("🚫 Bekor Qilish")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -79,6 +80,9 @@ def get_client_keyboard():
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
+    # Bekor qilish handleri (barcha conversationlar uchun)
+    bekor_filter = filters.Regex("^🚫 Bekor Qilish$") | filters.Regex("^/bekor$")
+
     # === SAVDO KIRITISH ===
     sale_conv = ConversationHandler(
         entry_points=[
@@ -86,20 +90,49 @@ def main():
             MessageHandler(filters.Regex("^➕ Yangi Savdo$"), start_sale),
         ],
         states={
-            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_name),
+                MessageHandler(bekor_filter, cancel),
+            ],
             PHONE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
                 CallbackQueryHandler(get_payment_type),
+                MessageHandler(bekor_filter, cancel),
             ],
-            PRODUCT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_product)],
-            TOTAL_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_total_price)],
-            PAYMENT_TYPE: [CallbackQueryHandler(get_payment_type)],
-            INSTALLMENT_PERIOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_installment_period)],
-            DOWN_PAYMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment)],
-            AGENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_agent)],
-            CONFIRM: [CallbackQueryHandler(confirm_sale)],
+            PRODUCT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_product),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            TOTAL_PRICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_total_price),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            PAYMENT_TYPE: [
+                CallbackQueryHandler(get_payment_type),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            INSTALLMENT_PERIOD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_installment_period),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            DOWN_PAYMENT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            AGENT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_agent),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            CONFIRM: [
+                CallbackQueryHandler(confirm_sale),
+                MessageHandler(bekor_filter, cancel),
+            ],
         },
-        fallbacks=[CommandHandler("bekor", cancel)],
+        fallbacks=[
+            CommandHandler("bekor", cancel),
+            MessageHandler(bekor_filter, cancel),
+        ],
+        conversation_timeout=300,
     )
 
     # === TO'LOV QABUL QILISH ===
@@ -109,11 +142,24 @@ def main():
             MessageHandler(filters.Regex("^💰 To'lov Qabul$"), start_payment),
         ],
         states={
-            PAY_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone)],
-            PAY_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, payment_amount)],
-            PAY_CONFIRM: [CallbackQueryHandler(payment_confirm)],
+            PAY_PHONE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            PAY_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, payment_amount),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            PAY_CONFIRM: [
+                CallbackQueryHandler(payment_confirm),
+                MessageHandler(bekor_filter, cancel),
+            ],
         },
-        fallbacks=[CommandHandler("bekor", cancel)],
+        fallbacks=[
+            CommandHandler("bekor", cancel),
+            MessageHandler(bekor_filter, cancel),
+        ],
+        conversation_timeout=300,
     )
 
     # === SAVDONI BEKOR QILISH ===
@@ -123,10 +169,20 @@ def main():
             MessageHandler(filters.Regex("^❌ Bekor Qilish$"), start_cancel),
         ],
         states={
-            CANCEL_SEARCH: [MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search)],
-            CANCEL_CONFIRM: [CallbackQueryHandler(cancel_confirm)],
+            CANCEL_SEARCH: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search),
+                MessageHandler(bekor_filter, cancel_cmd),
+            ],
+            CANCEL_CONFIRM: [
+                CallbackQueryHandler(cancel_confirm),
+                MessageHandler(bekor_filter, cancel_cmd),
+            ],
         },
-        fallbacks=[CommandHandler("bekor", cancel_cmd)],
+        fallbacks=[
+            CommandHandler("bekor", cancel_cmd),
+            MessageHandler(bekor_filter, cancel_cmd),
+        ],
+        conversation_timeout=300,
     )
 
     # === AUKSION ===
@@ -136,10 +192,20 @@ def main():
             MessageHandler(filters.Regex("^🎯 Auksion$"), start_auction),
         ],
         states={
-            AUCTION_SETUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, auction_bid)],
-            AUCTION_BID: [CallbackQueryHandler(auction_bid)],
+            AUCTION_SETUP: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, auction_bid),
+                MessageHandler(bekor_filter, cancel),
+            ],
+            AUCTION_BID: [
+                CallbackQueryHandler(auction_bid),
+                MessageHandler(bekor_filter, cancel),
+            ],
         },
-        fallbacks=[CommandHandler("bekor", cancel)],
+        fallbacks=[
+            CommandHandler("bekor", cancel),
+            MessageHandler(bekor_filter, cancel),
+        ],
+        conversation_timeout=300,
     )
 
     app.add_handler(sale_conv)
