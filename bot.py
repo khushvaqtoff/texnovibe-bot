@@ -40,8 +40,7 @@ from handlers.cancel_sale_handler import (
 from handlers.client_panel import (
     cmd_mening_malumotlarim, cmd_register,
     start_register, register_phone, cancel_register,
-    start_order, order_product_received, order_complete,
-    REGISTER_PHONE, ORDER_PRODUCT, ORDER_CONFIRM
+    REGISTER_PHONE
 )
 from scheduler.reminder import setup_scheduler
 
@@ -77,8 +76,9 @@ def get_admin_keyboard():
 def get_client_keyboard():
     """Mijoz uchun pastki menyu"""
     keyboard = [
-        [KeyboardButton("📊 Mening Kreditim"), KeyboardButton("📦 Buyurtma berish")],
-        [KeyboardButton("📝 Ro'yxatdan O'tish"), KeyboardButton("🏠 Bosh Menyu")],
+        [KeyboardButton("📊 Mening Kreditim")],
+        [KeyboardButton("📝 Ro'yxatdan O'tish")],
+        [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -259,32 +259,7 @@ def main():
         conversation_timeout=300,
     )
 
-    # === BUYURTMA BERISH (mijoz) ===
-    order_conv = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex("^📦 Buyurtma berish$"), start_order),
-            CommandHandler("buyurtma", start_order),
-        ],
-        states={
-            ORDER_PRODUCT: [
-                MessageHandler(home_filter, cancel_register),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, order_product_received),
-            ],
-            ORDER_CONFIRM: [
-                MessageHandler(home_filter, cancel_register),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, order_complete),
-            ],
-        },
-        fallbacks=[
-            CommandHandler("bekor", cancel_register),
-            CommandHandler("start", cancel_register),
-            MessageHandler(home_filter, cancel_register),
-        ],
-        conversation_timeout=300,
-    )
-
     app.add_handler(register_conv)
-    app.add_handler(order_conv)
 
     # === QIDIRISH CONVERSATION ===
     search_conv = ConversationHandler(
@@ -324,11 +299,13 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
     app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_export))
 
+
     # === BOX MENYU HANDLERI ===
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
 
     # === MIJOZ TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Kreditim$"), cmd_mening_malumotlarim))
+
 
     # === BUYRUQLAR ===
     app.add_handler(CommandHandler("tarix", cmd_history))
