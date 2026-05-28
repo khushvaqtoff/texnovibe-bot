@@ -29,7 +29,7 @@ async def start_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await search_query(update, context)
 
     await update.message.reply_text(
-        "🔍 Qidirish
+        "🔍 Qidirish "
 
 Ism yoki telefon raqamini yozing:",
         parse_mode="Markdown"
