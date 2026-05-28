@@ -87,7 +87,10 @@ def main():
         ],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            PHONE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
+                CallbackQueryHandler(get_payment_type),
+            ],
             PRODUCT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_product)],
             TOTAL_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_total_price)],
             PAYMENT_TYPE: [CallbackQueryHandler(get_payment_type)],

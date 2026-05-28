@@ -140,6 +140,7 @@ async def get_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data in ["dup_yes", "dup_no"]:
         if query.data == "dup_no":
             await query.edit_message_text("❌ Savdo bekor qilindi.")
+            context.user_data.clear()
             return ConversationHandler.END
         else:
             context.user_data["awaiting_dup_confirm"] = False
