@@ -63,7 +63,7 @@ def get_admin_keyboard():
         [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
         [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
         [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
-        [KeyboardButton("🚫 Bekor Qilish")],
+        [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -73,6 +73,7 @@ def get_client_keyboard():
     keyboard = [
         [KeyboardButton("📊 Mening Kreditim")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
+        [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -82,6 +83,7 @@ def main():
 
     # Bekor qilish handleri (barcha conversationlar uchun)
     bekor_filter = filters.Regex("^🚫 Bekor Qilish$") | filters.Regex("^/bekor$")
+    home_filter = filters.Regex("^🏠 Bosh Menyu$")
 
     # === SAVDO KIRITISH ===
     sale_conv = ConversationHandler(
@@ -130,7 +132,9 @@ def main():
         },
         fallbacks=[
             CommandHandler("bekor", cancel),
+            CommandHandler("start", cancel),
             MessageHandler(bekor_filter, cancel),
+            MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
     )
@@ -157,7 +161,9 @@ def main():
         },
         fallbacks=[
             CommandHandler("bekor", cancel),
+            CommandHandler("start", cancel),
             MessageHandler(bekor_filter, cancel),
+            MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
     )
@@ -180,7 +186,9 @@ def main():
         },
         fallbacks=[
             CommandHandler("bekor", cancel_cmd),
+            CommandHandler("start", cancel_cmd),
             MessageHandler(bekor_filter, cancel_cmd),
+            MessageHandler(home_filter, cancel_cmd),
         ],
         conversation_timeout=300,
     )
@@ -203,7 +211,9 @@ def main():
         },
         fallbacks=[
             CommandHandler("bekor", cancel),
+            CommandHandler("start", cancel),
             MessageHandler(bekor_filter, cancel),
+            MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
     )
@@ -225,6 +235,9 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
     app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_export))
     app.add_handler(MessageHandler(filters.Regex("^🔍 Qidirish$"), cmd_search_prompt))
+
+    # === BOX MENYU HANDLERI ===
+    app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
 
     # === MIJOZ TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Kreditim$"), cmd_mening_malumotlarim))

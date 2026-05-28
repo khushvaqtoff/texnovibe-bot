@@ -324,6 +324,31 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Bekor qilindi. /start — bosh menyu")
+    from telegram import ReplyKeyboardMarkup, KeyboardButton
+    import os
+    admin_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
+    user_id = update.effective_user.id
+
+    if user_id == admin_id:
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton("➕ Yangi Savdo"), KeyboardButton("💰 To'lov Qabul")],
+            [KeyboardButton("❌ Bekor Qilish"), KeyboardButton("📅 Bugungi To'lovlar")],
+            [KeyboardButton("👥 Mijozlar"), KeyboardButton("📊 Statistika")],
+            [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
+            [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
+            [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
+            [KeyboardButton("🏠 Bosh Menyu")],
+        ], resize_keyboard=True)
+    else:
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton("📊 Mening Kreditim")],
+            [KeyboardButton("📝 Ro'yxatdan O'tish")],
+            [KeyboardButton("🏠 Bosh Menyu")],
+        ], resize_keyboard=True)
+
+    await update.message.reply_text(
+        "🏠 Bosh menyuga qaytildi.",
+        reply_markup=keyboard
+    )
     context.user_data.clear()
     return ConversationHandler.END
