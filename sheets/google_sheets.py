@@ -192,12 +192,16 @@ def record_payment(phone: str, amount: float) -> dict:
     if new_remaining == 0:
         ws_sales.update_cell(row_index, 14, "Yopildi")
         ws_sales.update_cell(row_index, 15, "🟢 Alo")
-    # Bonus = Jami summaning 2% / muddat soni
-    total_price = float(target_row.get("Jami Summa", 0))
-    muddat = int(target_row.get("Muddat", 1) or 1)
-    bonus_per_payment = round(total_price * 0.02 / muddat)
+    # Bonus hisoblash:
+    # - Oylik to'lovni to'liq to'lasa: oylik summaning 2%
+    # - Oylikdan kam to'lasa: to'langan summaning 2%
     current_bonus = float(target_row.get("Kredit Bonusu", 0))
-    new_bonus = current_bonus + bonus_per_payment
+    payment_per_period = float(target_row.get("To'lov Summasi", 0))
+    if amount >= payment_per_period:
+        bonus_earned = round(payment_per_period * 0.02)
+    else:
+        bonus_earned = round(amount * 0.02)
+    new_bonus = current_bonus + bonus_earned
     ws_sales.update_cell(row_index, 18, new_bonus)
     payment_records = ws_payments.get_all_values()
     pay_id = f"PAY-{len(payment_records):04d}"
