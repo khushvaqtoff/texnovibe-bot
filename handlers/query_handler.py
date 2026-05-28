@@ -57,7 +57,7 @@ async def search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not results:
             await update.message.reply_text(
-                f"❌ *'{query_text}'* bo'yicha hech narsa topilmadi.
+                f"❌ *'{query_text}'* bo'yicha hech narsa topilmadi."
 
 "
                 "Qaytadan qidirish uchun ism yoki telefon yozing:",
