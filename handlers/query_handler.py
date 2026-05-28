@@ -5,11 +5,13 @@ So'rov handlerlari
 """
 
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
     get_payment_history, get_all_clients_with_status,
     get_overdue_payments, get_today_payments, get_statistics
 )
+
+SEARCH_QUERY = 50
 
 
 def format_money(amount) -> str:
@@ -17,6 +19,88 @@ def format_money(amount) -> str:
         return f"{int(float(amount)):,}".replace(",", " ")
     except:
         return str(amount)
+
+
+async def start_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Qidirish conversation boshlaydi"""
+    # Agar argument bilan kelsa (/qidir Anvarov) — bevosita qidirish
+    if context.args:
+        context.user_data["search_text"] = " ".join(context.args)
+        return await search_query(update, context)
+
+    await update.message.reply_text(
+        "🔍 *Qidirish*
+
+"
+        "Ism yoki telefon raqamini yozing:",
+        parse_mode="Markdown"
+    )
+    return SEARCH_QUERY
+
+
+async def search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Qidiruv so'rovini bajaradi"""
+    if context.user_data.get("search_text"):
+        query_text = context.user_data.pop("search_text").lower().strip()
+    else:
+        query_text = update.message.text.strip().lower()
+
+    try:
+        all_clients = get_all_clients_with_status()
+        results = []
+
+        for client in all_clients:
+            fio = str(client.get("FIO", "")).lower()
+            phone = str(client.get("Telefon", "")).lower().replace("+", "").replace(" ", "")
+            search_clean = query_text.replace("+", "").replace(" ", "")
+            if query_text in fio or search_clean in phone:
+                results.append(client)
+
+        if not results:
+            await update.message.reply_text(
+                f"❌ *'{query_text}'* bo'yicha hech narsa topilmadi.
+
+"
+                "Qaytadan qidirish uchun ism yoki telefon yozing:",
+                parse_mode="Markdown"
+            )
+            return SEARCH_QUERY
+
+        text = f"🔍 *QIDIRUV NATIJALARI* ({len(results)} ta)
+━━━━━━━━━━━━━━━━━━━━
+"
+
+        for rec in results[:10]:
+            fio = rec.get("FIO", "")
+            phone = rec.get("Telefon", "")
+            tovar = rec.get("Tovar", "")
+            qoldiq = format_money(rec.get("Qoldiq", 0))
+            keyingi = rec.get("Keyingi To'lov Sanasi", "")
+            reyting = rec.get("Reyting", "🟡 Yangi")
+            text += (
+                f"👤 *{fio}*
+"
+                f"📞 `{phone}`
+"
+                f"🛍 {tovar}
+"
+                f"💰 Qoldiq: *{qoldiq} so'm*
+"
+                f"📅 Keyingi: {keyingi}
+"
+                f"⭐ {reyting}
+"
+                f"─────────────────
+"
+            )
+
+        await update.message.reply_text(text, parse_mode="Markdown")
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Xatolik: `{str(e)}`", parse_mode="Markdown")
+
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):

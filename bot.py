@@ -25,7 +25,8 @@ from handlers.payment_handler import (
 )
 from handlers.query_handler import (
     cmd_history, cmd_search, cmd_debtors, cmd_blacklist,
-    cmd_rating, cmd_clients, cmd_today, cmd_stats
+    cmd_rating, cmd_clients, cmd_today, cmd_stats,
+    start_search, search_query, SEARCH_QUERY
 )
 from handlers.auction_handler import (
     start_auction, auction_bid, auction_end_cmd,
@@ -259,6 +260,28 @@ def main():
     )
 
     app.add_handler(register_conv)
+
+    # === QIDIRISH CONVERSATION ===
+    search_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^🔍 Qidirish$"), start_search),
+            CommandHandler("qidir", start_search),
+        ],
+        states={
+            SEARCH_QUERY: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_query),
+            ],
+        },
+        fallbacks=[
+            CommandHandler("bekor", cancel),
+            CommandHandler("start", cancel),
+            MessageHandler(home_filter, cancel),
+        ],
+        conversation_timeout=120,
+    )
+    app.add_handler(search_conv)
     app.add_handler(sale_conv)
     app.add_handler(payment_conv)
     app.add_handler(cancel_sale_conv)
@@ -275,7 +298,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🚫 Qora Ro'yxat$"), cmd_blacklist))
     app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
     app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_export))
-    app.add_handler(MessageHandler(filters.Regex("^🔍 Qidirish$"), cmd_search_prompt))
+
 
     # === BOX MENYU HANDLERI ===
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
