@@ -42,6 +42,11 @@ from handlers.client_panel import (
     start_register, register_phone, cancel_register,
     REGISTER_PHONE
 )
+from handlers.catalog_handler import (
+    start_add_product, cat_get_name, cat_get_price,
+    cat_get_desc, cat_confirm, cmd_catalog, cmd_remove_product,
+    CAT_NAME, CAT_PRICE, CAT_DESC, CAT_CONFIRM
+)
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -68,6 +73,7 @@ def get_admin_keyboard():
         [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
         [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
         [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
+        [KeyboardButton("📦 Tovar Qoshish"), KeyboardButton("🛍 Katalog")],
         [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -78,6 +84,7 @@ def get_client_keyboard():
     keyboard = [
         [KeyboardButton("📊 Mening Kreditim")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
+        [KeyboardButton("🛍 Katalog")],
         [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -261,6 +268,42 @@ def main():
 
     app.add_handler(register_conv)
 
+    # === KATALOG QOSHISH (admin) ===
+    catalog_add_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product),
+            CommandHandler("tovarqosh", start_add_product),
+        ],
+        states={
+            CAT_NAME: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, cat_get_name),
+            ],
+            CAT_PRICE: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, cat_get_price),
+            ],
+            CAT_DESC: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, cat_get_desc),
+            ],
+            CAT_CONFIRM: [
+                CallbackQueryHandler(cat_confirm),
+                MessageHandler(home_filter, cancel),
+            ],
+        },
+        fallbacks=[
+            CommandHandler("bekor", cancel),
+            CommandHandler("start", cancel),
+            MessageHandler(home_filter, cancel),
+        ],
+        conversation_timeout=300,
+    )
+    app.add_handler(catalog_add_conv)
+
     # === QIDIRISH CONVERSATION ===
     search_conv = ConversationHandler(
         entry_points=[
@@ -320,6 +363,10 @@ def main():
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
     app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))
+    app.add_handler(CommandHandler("katalog", cmd_catalog))
+    app.add_handler(CommandHandler("tovarchiqar", cmd_remove_product))
+    app.add_handler(MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product))
+    app.add_handler(MessageHandler(filters.Regex("^🛍 Katalog$"), cmd_catalog))
 
     setup_scheduler(app)
 
