@@ -49,7 +49,7 @@ from handlers.catalog_handler import (
 )
 from handlers.order_handler import (
     start_order, order_select, order_confirm, cancel_order,
-    ORDER_SELECT, ORDER_CONFIRM
+    cmd_orders, ORDER_SELECT, ORDER_CONFIRM
 )
 from scheduler.reminder import setup_scheduler
 
@@ -78,7 +78,7 @@ def get_admin_keyboard():
         [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
         [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
         [KeyboardButton("📦 Tovar Qoshish"), KeyboardButton("🛍 Katalog")],
-        [KeyboardButton("🏠 Bosh Menyu")],
+        [KeyboardButton("🛒 Buyurtmalar"), KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -397,6 +397,8 @@ def main():
     app.add_handler(CommandHandler("tovarchiqar", cmd_remove_product))
     app.add_handler(MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product))
     app.add_handler(MessageHandler(filters.Regex("^🛍 Katalog$"), cmd_catalog))
+    app.add_handler(MessageHandler(filters.Regex("^🛒 Buyurtmalar$"), cmd_orders))
+    app.add_handler(CommandHandler("buyurtmalar", cmd_orders))
 
     setup_scheduler(app)
 

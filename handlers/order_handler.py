@@ -231,3 +231,65 @@ async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bosh menyuga qaytildi.", reply_markup=keyboard)
     context.user_data.clear()
     return ConversationHandler.END
+
+
+async def cmd_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin uchun buyurtmalar royxati"""
+    await update.message.reply_text("Buyurtmalar yuklanmoqda...")
+
+    try:
+        sh = get_spreadsheet()
+        from sheets.google_sheets import ensure_worksheets
+        existing = [ws.title for ws in sh.worksheets()]
+
+        if "Buyurtmalar" not in existing:
+            await update.message.reply_text("Hali hech qanday buyurtma yoq.")
+            return
+
+        ws = sh.worksheet("Buyurtmalar")
+        records = ws.get_all_records()
+
+        if not records:
+            await update.message.reply_text("Hali hech qanday buyurtma yoq.")
+            return
+
+        # Yangi buyurtmalar
+        yangi = [r for r in records if r.get("Holat") == "Yangi"]
+        all_orders = records
+
+        text = f"BUYURTMALAR ({len(all_orders)} ta jami | {len(yangi)} ta yangi)\n\n"
+
+        # Oxirgi 20 ta
+        for rec in reversed(all_orders[-20:]):
+            holat = rec.get("Holat", "")
+            if holat == "Yangi":
+                emoji = "🆕"
+            elif holat == "Tasdiqlangan":
+                emoji = "✅"
+            elif holat == "Bekor":
+                emoji = "❌"
+            else:
+                emoji = "📋"
+
+            order_id = rec.get("ID", "")
+            sana = rec.get("Sana", "")
+            fio = rec.get("FIO", "")
+            phone = rec.get("Telefon", "") or "Royxatdan otmagan"
+            tovar = rec.get("Tovar", "")
+            narx = format_money(rec.get("Narx", 0))
+
+            text += (
+                f"{emoji} {order_id} | {sana}\n"
+                f"👤 {fio}\n"
+                f"📞 {phone}\n"
+                f"🛍 {tovar} — {narx} som\n"
+                f"Holat: {holat}\n\n"
+            )
+
+        if len(all_orders) > 20:
+            text += f"... va yana {len(all_orders)-20} ta buyurtma\n"
+
+        await update.message.reply_text(text)
+
+    except Exception as e:
+        await update.message.reply_text(f"Xatolik: {str(e)}")
