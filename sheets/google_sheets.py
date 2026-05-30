@@ -27,7 +27,8 @@ SALE_HEADERS = [
     "Jami Summa", "Boshlang'ich To'lov", "Qoldiq",
     "To'lov Turi", "Muddat", "To'lov Summasi",
     "Keyingi To'lov Sanasi", "Agent", "Holat",
-    "Reyting", "Tug'ilgan Kun", "Izoh", "Kredit Bonusu"
+    "Reyting", "Tug'ilgan Kun", "Izoh", "Kredit Bonusu",
+    "Ish Joyi", "To'lov Kuni", "To'langan Summa"
 ]
 PAYMENT_HEADERS = [
     "ID", "Savdo ID", "FIO", "Telefon",
@@ -36,7 +37,8 @@ PAYMENT_HEADERS = [
 CLIENT_HEADERS = [
     "FIO", "Telefon", "Chat ID", "Telegram Username",
     "Jami Savdolar", "Muvaffaqiyatli Yopilgan", "Kredit Bali",
-    "Status", "Tug'ilgan Kun", "Ro'yxatga Olingan Sana"
+    "Status", "Tug'ilgan Kun", "Ro'yxatga Olingan Sana",
+    "Ish Joyi", "Oxirgi Faollik", "Eslatma Oladi"
 ]
 
 
@@ -134,13 +136,27 @@ def add_sale(sale_data: dict) -> dict:
     if sale_data["payment_type"] == "Haftalik":
         next_payment = today + timedelta(weeks=1)
     else:
-        next_payment = today + timedelta(days=30)
+        pay_day = int(sale_data.get("pay_day", 0) or 0)
+        if pay_day > 0:
+            # Keyingi oyda belgilangan kun
+            next_month = today.month + 1 if today.month < 12 else 1
+            next_year = today.year if today.month < 12 else today.year + 1
+            import calendar
+            max_day = calendar.monthrange(next_year, next_month)[1]
+            actual_day = min(pay_day, max_day)
+            from datetime import date as date_cls
+            next_payment = date_cls(next_year, next_month, actual_day)
+        else:
+            next_payment = today + timedelta(days=30)
     row = [
         sale_id, today.strftime("%d.%m.%Y"), sale_data["fio"], sale_data["phone"],
         sale_data["product"], float(sale_data["total_price"]), float(sale_data.get("down_payment", 0)),
         remaining, sale_data["payment_type"], period, payment_per_period,
         next_payment.strftime("%d.%m.%Y"), sale_data.get("agent", ""), "Faol", "🟡 Yangi",
-        sale_data.get("birthday", ""), "", 0
+        sale_data.get("birthday", ""), "", 0,
+        sale_data.get("work_place", ""),
+        sale_data.get("pay_day", ""),
+        float(sale_data.get("down_payment", 0))  # Tolangan summa (avansdan boshlanadi)
     ]
     ws_sales.append_row(row)
     update_client_db(ws_clients, sale_data)
@@ -189,6 +205,10 @@ def record_payment(phone: str, amount: float) -> dict:
     next_date = today + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
     ws_sales.update_cell(row_index, 8, new_remaining)
     ws_sales.update_cell(row_index, 12, next_date.strftime("%d.%m.%Y"))
+    # Tolangan summani yangilash (21-ustun)
+    old_paid = float(target_row.get("To'langan Summa", 0) or 0)
+    new_paid = old_paid + amount
+    ws_sales.update_cell(row_index, 21, new_paid)
     if new_remaining == 0:
         ws_sales.update_cell(row_index, 14, "Yopildi")
         ws_sales.update_cell(row_index, 15, "🟢 Alo")
@@ -225,11 +245,31 @@ def update_rating(ws, row_index, today, record):
 def update_client_db(ws_clients, sale_data):
     records = ws_clients.get_all_records()
     phone = str(sale_data["phone"]).replace(" ", "")
+    today_str = date.today().strftime("%d.%m.%Y")
+
     for i, rec in enumerate(records, start=2):
         if str(rec.get("Telefon", "")).replace(" ", "") == phone:
-            ws_clients.update_cell(i, 5, int(rec.get("Jami Savdolar", 0)) + 1)
+            total = int(rec.get("Jami Savdolar", 0)) + 1
+            ws_clients.update_cell(i, 5, total)
+            ws_clients.update_cell(i, 11, sale_data.get("work_place", ""))
+            ws_clients.update_cell(i, 12, today_str)
             return
-    ws_clients.append_row([sale_data["fio"], sale_data["phone"], "", "", 1, 0, 0, "🥉 Bronze", sale_data.get("birthday", ""), date.today().strftime("%d.%m.%Y")])
+
+    ws_clients.append_row([
+        sale_data["fio"],
+        sale_data["phone"],
+        "",   # Chat ID
+        "",   # Username
+        1,    # Jami savdolar
+        0,    # Muvaffaqiyatli yopilgan
+        0,    # Kredit bali
+        "Bronze",
+        sale_data.get("birthday", ""),
+        today_str,
+        sale_data.get("work_place", ""),
+        today_str,
+        "Yoq"  # Eslatma oladi
+    ])
 
 
 def check_duplicate(phone: str) -> dict:
@@ -302,11 +342,21 @@ def save_client_chat_id(phone: str, chat_id: int, username: str = ""):
     sheets = ensure_worksheets(sh)
     ws = sheets["Mijozlar"]
     phone_clean = str(phone).replace(" ", "")
+    today_str = date.today().strftime("%d.%m.%Y")
+
     for i, rec in enumerate(ws.get_all_records(), start=2):
         if str(rec.get("Telefon", "")).replace(" ", "") == phone_clean:
             ws.update_cell(i, 3, chat_id)
             ws.update_cell(i, 4, username)
+            ws.update_cell(i, 12, today_str)
+            ws.update_cell(i, 13, "Ha")  # Eslatma oladi
             return True
+
+    # Agar bazada yoq bolsa - yangi qator
+    ws.append_row([
+        "", phone, chat_id, username,
+        0, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
+    ])
     return False
 
 
@@ -319,10 +369,25 @@ def get_todays_birthdays() -> list:
 
 
 def get_client_chat_id(phone: str) -> str:
+    """Telefon raqami orqali mijozning Chat ID sini topadi"""
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    phone_clean = str(phone).replace(" ", "")
+
+    # Telefon raqamini tozalash — faqat raqamlar
+    phone_digits = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
+
+    # Avval Mijozlar listidan qidirish
     for rec in sheets["Mijozlar"].get_all_records():
-        if str(rec.get("Telefon", "")).replace(" ", "") == phone_clean:
-            return str(rec.get("Chat ID", ""))
+        rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "").strip()
+        if rec_phone == phone_digits and str(rec.get("Chat ID", "")).strip():
+            return str(rec.get("Chat ID", "")).strip()
+
+    # Topilmasa Savdolar listidan qidirish (Chat ID ustuni bor bolsa)
+    for rec in sheets["Savdolar"].get_all_records():
+        rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "").strip()
+        if rec_phone == phone_digits:
+            chat_id = str(rec.get("Chat ID", "")).strip()
+            if chat_id:
+                return chat_id
+
     return ""

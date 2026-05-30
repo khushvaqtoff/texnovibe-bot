@@ -13,11 +13,11 @@ from telegram.ext import (
 from dotenv import load_dotenv
 
 from handlers.sale_handler import (
-    start_sale, get_name, get_phone, get_product, get_total_price,
-    get_payment_type, get_installment_period, get_down_payment,
-    get_agent, confirm_sale, cancel,
-    NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
-    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, CONFIRM
+    start_sale, get_name, get_phone, get_workplace, get_product,
+    get_total_price, get_payment_type, get_installment_period,
+    get_down_payment, get_first_payment_date, get_agent, confirm_sale, cancel,
+    NAME, PHONE, WORKPLACE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
+    INSTALLMENT_PERIOD, DOWN_PAYMENT, FIRST_PAYMENT_DATE, AGENT, CONFIRM
 )
 from handlers.payment_handler import (
     start_payment, payment_phone, payment_amount, payment_confirm,
@@ -32,7 +32,8 @@ from handlers.auction_handler import (
     start_auction, auction_bid, auction_end_cmd,
     AUCTION_SETUP, AUCTION_BID
 )
-from handlers.admin_handler import cmd_export, cmd_backup
+from handlers.admin_handler import cmd_export, cmd_backup, cmd_clients_db
+from handlers.report_handler import cmd_daily_report, cmd_warehouse
 from handlers.cancel_sale_handler import (
     start_cancel, cancel_search, cancel_confirm, cancel_cmd,
     CANCEL_SEARCH, CANCEL_CONFIRM
@@ -48,8 +49,8 @@ from handlers.catalog_handler import (
     CAT_NAME, CAT_PRICE, CAT_DESC, CAT_CONFIRM
 )
 from handlers.order_handler import (
-    start_order, order_select, order_confirm, cancel_order,
-    cmd_orders, ORDER_SELECT, ORDER_CONFIRM
+    start_order, order_select, order_workplace, order_confirm, cancel_order,
+    cmd_orders, ORDER_SELECT, ORDER_WORKPLACE, ORDER_CONFIRM
 )
 from scheduler.reminder import setup_scheduler
 
@@ -78,7 +79,9 @@ def get_admin_keyboard():
         [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
         [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
         [KeyboardButton("📦 Tovar Qoshish"), KeyboardButton("🛍 Katalog")],
-        [KeyboardButton("🛒 Buyurtmalar"), KeyboardButton("🏠 Bosh Menyu")],
+        [KeyboardButton("🛒 Buyurtmalar"), KeyboardButton("👥 Mijozlar Bazasi")],
+        [KeyboardButton("📈 Bugungi Hisobot"), KeyboardButton("🏭 Ombor Nazorati")],
+        [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -120,6 +123,11 @@ def main():
                 CallbackQueryHandler(get_payment_type),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
             ],
+            WORKPLACE: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_workplace),
+            ],
             PRODUCT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -144,6 +152,12 @@ def main():
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
+            ],
+            FIRST_PAYMENT_DATE: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_first_payment_date),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_first_payment_date),
             ],
             AGENT: [
                 MessageHandler(home_filter, cancel),
@@ -320,6 +334,10 @@ def main():
                 CallbackQueryHandler(order_select),
                 MessageHandler(home_filter, cancel_order),
             ],
+            ORDER_WORKPLACE: [
+                MessageHandler(home_filter, cancel_order),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, order_workplace),
+            ],
             ORDER_CONFIRM: [
                 CallbackQueryHandler(order_confirm),
                 MessageHandler(home_filter, cancel_order),
@@ -393,6 +411,12 @@ def main():
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
     app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))
+    app.add_handler(CommandHandler("mijozlarbazasi", cmd_clients_db))
+    app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar Bazasi$"), cmd_clients_db))
+    app.add_handler(CommandHandler("hisobot", cmd_daily_report))
+    app.add_handler(CommandHandler("ombor", cmd_warehouse))
+    app.add_handler(MessageHandler(filters.Regex("^📈 Bugungi Hisobot$"), cmd_daily_report))
+    app.add_handler(MessageHandler(filters.Regex("^🏭 Ombor Nazorati$"), cmd_warehouse))
     app.add_handler(CommandHandler("katalog", cmd_catalog))
     app.add_handler(CommandHandler("tovarchiqar", cmd_remove_product))
     app.add_handler(MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product))
