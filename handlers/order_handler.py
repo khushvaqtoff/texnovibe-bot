@@ -100,7 +100,7 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         desc = selected.get("Tavsif", "")
 
         text = (
-            f"Tanlangan tovar:
+            "Tanlangan tovar:
 
 "
             f"Nomi: {name}
@@ -139,7 +139,7 @@ async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price = format_money(selected.get("Narx", 0))
 
     text = (
-        f"Buyurtma tasdiqlash:
+        "Buyurtma tasdiqlash:
 
 "
         f"Tovar: {name}
@@ -235,7 +235,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tg_username = f"@{user.username}" if user.username else "Yo'q"
         work_place = context.user_data.get("order_workplace", "")
         admin_msg = (
-            f"YANGI BUYURTMA!
+            "YANGI BUYURTMA!
 
 "
             f"Buyurtma ID: {order_id}
