@@ -15,9 +15,9 @@ from dotenv import load_dotenv
 from handlers.sale_handler import (
     start_sale, get_name, get_phone, get_product,
     get_total_price, get_payment_type, get_installment_period,
-    get_down_payment, get_first_payment_date, get_agent, confirm_sale, cancel,
-    NAME, PHONE, WORKPLACE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
-    INSTALLMENT_PERIOD, DOWN_PAYMENT, FIRST_PAYMENT_DATE, AGENT, CONFIRM
+    get_down_payment, get_agent, get_pay_day, confirm_sale, cancel,
+    NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
+    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, WORK_PLACE, PAY_DAY, CONFIRM
 )
 from handlers.payment_handler import (
     start_payment, payment_phone, payment_amount, payment_confirm,
@@ -123,11 +123,7 @@ def main():
                 CallbackQueryHandler(get_payment_type),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
             ],
-            WORKPLACE: [
-                MessageHandler(home_filter, cancel),
-                MessageHandler(bekor_filter, cancel),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_workplace),
-            ],
+
             PRODUCT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -153,16 +149,16 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
             ],
-            FIRST_PAYMENT_DATE: [
-                MessageHandler(home_filter, cancel),
-                MessageHandler(bekor_filter, cancel),
-                CallbackQueryHandler(get_first_payment_date),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_first_payment_date),
-            ],
+
             AGENT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_agent),
+            ],
+            PAY_DAY: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_pay_day),
             ],
             CONFIRM: [
                 MessageHandler(home_filter, cancel),
