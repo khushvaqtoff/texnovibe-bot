@@ -11,7 +11,7 @@ from handlers.catalog_handler import ensure_catalog_sheet
 from datetime import date
 import os
 
-ORDER_SELECT, ORDER_CONFIRM = range(70, 72)
+ORDER_SELECT, ORDER_WORKPLACE, ORDER_CONFIRM = range(70, 73)
 
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
@@ -100,29 +100,68 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         desc = selected.get("Tavsif", "")
 
         text = (
-            f"Tanlangan tovar:\n\n"
-            f"Nomi: {name}\n"
-            f"Narx: {price} som\n"
+            f"Tanlangan tovar:
+
+"
+            f"Nomi: {name}
+"
+            f"Narx: {price} som
+"
         )
         if desc:
-            text += f"Tavsif: {desc}\n"
-        text += "\nBuyurtma berasizmi?"
+            text += f"Tavsif: {desc}
+"
 
-        keyboard = [
-            [
-                InlineKeyboardButton("Ha, buyurtma beraman", callback_data="order_yes"),
-                InlineKeyboardButton("Yoq, bekor", callback_data="order_no")
-            ]
-        ]
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text)
+        await query.message.reply_text(
+            "Ish joyingizni kiriting:
+"
+            "(Masalan: Bozor, Maktab, Xususiy)
+"
+            "(Yoq bolsa: - yozing)"
         )
-        return ORDER_CONFIRM
+        return ORDER_WORKPLACE
 
     except Exception as e:
         await query.edit_message_text(f"Xatolik: {str(e)}")
         return ConversationHandler.END
+
+
+async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ish joyini qabul qiladi"""
+    work_place = update.message.text.strip()
+    if work_place == "-":
+        work_place = ""
+    context.user_data["order_workplace"] = work_place
+
+    selected = context.user_data.get("order_product", {})
+    name = selected.get("Tovar Nomi", "")
+    price = format_money(selected.get("Narx", 0))
+
+    text = (
+        f"Buyurtma tasdiqlash:
+
+"
+        f"Tovar: {name}
+"
+        f"Narx: {price} som
+"
+        f"Ish joyi: {work_place or 'Korsatilmagan'}
+
+"
+        f"Tasdiqlaysizmi?"
+    )
+    keyboard = [
+        [
+            InlineKeyboardButton("Ha, buyurtma beraman", callback_data="order_yes"),
+            InlineKeyboardButton("Yoq, bekor", callback_data="order_no")
+        ]
+    ]
+    await update.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return ORDER_CONFIRM
 
 
 async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -171,7 +210,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         existing = [ws.title for ws in sh.worksheets()]
         if "Buyurtmalar" not in existing:
             ws_orders = sh.add_worksheet(title="Buyurtmalar", rows=500, cols=8)
-            ws_orders.append_row(["ID", "Sana", "FIO", "Telefon", "Chat ID", "Tovar", "Narx", "Holat"])
+            ws_orders.append_row(["ID", "Sana", "FIO", "Telefon", "Chat ID", "Tovar", "Narx", "Holat", "Ish Joyi"])
             ws_orders.format("A1:H1", {"textFormat": {"bold": True}, "backgroundColor": {"red": 1.0, "green": 0.6, "blue": 0.0}})
         else:
             ws_orders = sh.worksheet("Buyurtmalar")
@@ -179,6 +218,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         all_orders = ws_orders.get_all_values()
         order_id = f"ORD-{len(all_orders):03d}"
 
+        work_place = context.user_data.get("order_workplace", "")
         ws_orders.append_row([
             order_id,
             today,
@@ -187,22 +227,39 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             str(user.id),
             name,
             selected.get("Narx", 0),
-            "Yangi"
+            "Yangi",
+            work_place
         ])
 
         # Adminga xabar
         tg_username = f"@{user.username}" if user.username else "Yo'q"
+        work_place = context.user_data.get("order_workplace", "")
         admin_msg = (
-            f"YANGI BUYURTMA!\n\n"
-            f"Buyurtma ID: {order_id}\n"
-            f"Sana: {today}\n\n"
-            f"Mijoz: {client_fio or user.full_name}\n"
-            f"Telefon: {client_phone or 'Royxatdan otmagan'}\n"
-            f"Telegram: {tg_username}\n"
-            f"Chat ID: {user.id}\n\n"
-            f"Tovar: {name}\n"
-            f"Narx: {price} som\n"
+            f"YANGI BUYURTMA!
+
+"
+            f"Buyurtma ID: {order_id}
+"
+            f"Sana: {today}
+
+"
+            f"Mijoz: {client_fio or user.full_name}
+"
+            f"Telefon: {client_phone or 'Royxatdan otmagan'}
+"
+            f"Telegram: {tg_username}
+"
+            f"Chat ID: {user.id}
+
+"
+            f"Tovar: {name}
+"
+            f"Narx: {price} som
+"
         )
+        if work_place:
+            admin_msg += f"Ish joyi: {work_place}
+"
 
         await query.get_bot().send_message(
             chat_id=ADMIN_CHAT_ID,

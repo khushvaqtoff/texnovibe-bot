@@ -151,6 +151,22 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ws.update_cell(row_index, 14, "Bekor qilindi")
         ws.update_cell(row_index, 17, f"Bekor qilindi: {today}")
 
+        # Butun qatorni qizil rang bilan belgilash
+        try:
+            row_range = f"A{row_index}:U{row_index}"
+            ws.format(row_range, {
+                "backgroundColor": {
+                    "red": 1.0,
+                    "green": 0.8,
+                    "blue": 0.8
+                },
+                "textFormat": {
+                    "strikethrough": True
+                }
+            })
+        except Exception as fmt_err:
+            pass  # Format xatosi bo'lsa davom etamiz
+
         fio = rec.get("FIO", "")
         tovar = rec.get("Tovar", "")
         sale_id = rec.get("ID", "")
