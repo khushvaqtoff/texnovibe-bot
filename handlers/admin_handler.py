@@ -119,3 +119,69 @@ async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ SPREADSHEET_ID sozlanmagan.\n"
             "`.env` faylini tekshiring."
         )
+
+
+async def cmd_clients_db(update, context):
+    """Mijozlar bazasi - Chat ID bilan"""
+    await update.message.reply_text("Mijozlar bazasi yuklanmoqda...")
+
+    try:
+        from sheets.google_sheets import get_spreadsheet, ensure_worksheets
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        ws = sheets["Mijozlar"]
+        records = ws.get_all_records()
+
+        if not records:
+            await update.message.reply_text("Mijozlar bazasi bosh.")
+            return
+
+        has_chat = [r for r in records if str(r.get("Chat ID", "")).strip()]
+        no_chat = [r for r in records if not str(r.get("Chat ID", "")).strip()]
+
+        text = (
+            f"MIJOZLAR BAZASI\n"
+            f"Jami: {len(records)} ta\n"
+            f"Telegram ulangan: {len(has_chat)} ta\n"
+            f"Telegram ulanmagan: {len(no_chat)} ta\n\n"
+        )
+
+        if has_chat:
+            text += "TELEGRAM ULANGAN MIJOZLAR:\n"
+            for rec in has_chat[:15]:
+                fio = rec.get("FIO", "")
+                phone = rec.get("Telefon", "")
+                chat_id = rec.get("Chat ID", "")
+                username = rec.get("Telegram Username", "")
+                work = rec.get("Ish Joyi", "")
+                status = rec.get("Status", "")
+                eslatma = rec.get("Eslatma Oladi", "")
+
+                uname = f"@{username}" if username else "Yoq"
+                text += (
+                    f"👤 {fio}\n"
+                    f"   📞 {phone}\n"
+                    f"   🆔 Chat ID: {chat_id}\n"
+                    f"   📱 {uname}\n"
+                )
+                if work:
+                    text += f"   🏢 {work}\n"
+                text += f"   🔔 Eslatma: {eslatma or 'Yoq'}\n\n"
+
+        if no_chat:
+            text += f"\nTELEGRAM ULANMAGAN ({len(no_chat)} ta):\n"
+            for rec in no_chat[:10]:
+                fio = rec.get("FIO", "")
+                phone = rec.get("Telefon", "")
+                text += f"• {fio} — {phone}\n"
+
+        # Uzun bo'lsa bo'lib yuborish
+        if len(text) > 4000:
+            parts = [text[i:i+4000] for i in range(0, len(text), 4000)]
+            for part in parts:
+                await update.message.reply_text(part)
+        else:
+            await update.message.reply_text(text)
+
+    except Exception as e:
+        await update.message.reply_text(f"Xatolik: {str(e)}")
