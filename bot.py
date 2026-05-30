@@ -13,7 +13,7 @@ from telegram.ext import (
 from dotenv import load_dotenv
 
 from handlers.sale_handler import (
-    start_sale, get_name, get_phone, get_workplace, get_product,
+    start_sale, get_name, get_phone, get_product,
     get_total_price, get_payment_type, get_installment_period,
     get_down_payment, get_first_payment_date, get_agent, confirm_sale, cancel,
     NAME, PHONE, WORKPLACE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
