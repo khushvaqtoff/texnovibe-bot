@@ -175,6 +175,7 @@ def main():
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
                 CallbackQueryHandler(get_payment_type),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_payment_type),
             ],
             INSTALLMENT_PERIOD: [
                 MessageHandler(home_filter, cancel),
