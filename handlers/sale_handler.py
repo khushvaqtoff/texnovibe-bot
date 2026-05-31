@@ -7,9 +7,8 @@ from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import add_sale, check_duplicate
 import os
 
-# MUHIM: Holatlar ketma-ketligi bot.py bilan bir xil bo'lishi shart!
-NAME, PHONE, WORK_PLACE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
-    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, CONFIRM = range(11)
+NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
+    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, WORK_PLACE, PAY_DAY, CONFIRM = range(11)
 
 
 def format_money(amount) -> str:
@@ -22,8 +21,8 @@ def format_money(amount) -> str:
 async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "Yangi Nasiya Savdo\n\n"
-        "1. Mijozning toliq ismini kiriting:\n"
+        "➕ Yangi Nasiya Savdo\n\n"
+        "1️⃣ Mijozning to'liq ismini kiriting:\n"
         "(Masalan: Anvarov Ali Karimovich)"
     )
     return NAME
@@ -32,12 +31,12 @@ async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.message.text.strip()
     if len(name) < 3:
-        await update.message.reply_text("Ism juda qisqa. Qaytadan kiriting:")
+        await update.message.reply_text("❌ Ism juda qisqa. Qaytadan kiriting:")
         return NAME
     context.user_data["fio"] = name
     await update.message.reply_text(
-        f"Ism: {name}\n\n"
-        "2. Telefon raqamini kiriting:\n"
+        f"✅ Ism: {name}\n\n"
+        "2️⃣ Telefon raqamini kiriting:\n"
         "(Masalan: +998901234567)"
     )
     return PHONE
@@ -47,7 +46,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = update.message.text.strip()
     clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
     if not clean_phone.isdigit() or len(clean_phone) < 9:
-        await update.message.reply_text("Telefon raqami notogri. Qaytadan kiriting:")
+        await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting:")
         return PHONE
 
     dup = check_duplicate(phone)
@@ -56,120 +55,133 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         product = dup["product"]
         remaining = format_money(dup["remaining"])
         keyboard = [[
-            InlineKeyboardButton("Ha, qoshaman", callback_data="dup_yes"),
-            InlineKeyboardButton("Yoq, bekor", callback_data="dup_no")
+            InlineKeyboardButton("✅ Ha, qo'shaman", callback_data="dup_yes"),
+            InlineKeyboardButton("❌ Yo'q, bekor", callback_data="dup_no")
         ]]
         await update.message.reply_text(
-            f"Diqqat! Bu telefon bazada bor!\n\n"
-            f"Mijoz: {fio}\n"
-            f"Tovar: {product}\n"
-            f"Qoldiq: {remaining} som\n\n"
-            f"Shunda ham yangi savdo qoshaveraymi?",
+            f"⚠️ Diqqat! Bu telefon bazada bor!\n\n"
+            f"👤 Mijoz: {fio}\n"
+            f"🛍 Tovar: {product}\n"
+            f"💰 Qoldiq: {remaining} so'm\n\n"
+            f"Shunda ham yangi savdo qo'shaveraymi?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         context.user_data["phone"] = phone
         context.user_data["awaiting_dup_confirm"] = True
-        return WORK_PLACE  # Tugma bosilishini WORK_PLACE ichida kutadi
+        # TUZATISH: PRODUCT holatiga o'tamiz — duplicate tasdiqlash shu yerda
+        return PRODUCT
 
     context.user_data["phone"] = phone
     await update.message.reply_text(
-        f"Telefon: {phone}\n\n"
-        "3. Mijozning ish joyini kiriting:\n"
+        f"✅ Telefon: {phone}\n\n"
+        "3️⃣ Mijozning ish joyini kiriting:\n"
         "(Masalan: Bozor, Maktab, Xususiy)\n"
-        "(Yoq bolsa: - yozing)"
-    )
-    return WORK_PLACE
-
-
-async def get_work_place(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Callback query (Dublikat tekshiruvi tugmasi) kelganini tekshirish
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-
-        if query.data == "dup_no":
-            await query.edit_message_text("Savdo bekor qilindi.")
-            context.user_data.clear()
-            return ConversationHandler.END
-        elif query.data == "dup_yes":
-            context.user_data["awaiting_dup_confirm"] = False
-            phone = context.user_data["phone"]
-            await query.edit_message_text(
-                f"Telefon: {phone}\n\n"
-                "3. Mijozning ish joyini kiriting:\n"
-                "(Masalan: Bozor, Maktab, Xususiy)\n"
-                "(Yoq bolsa: - yozing)"
-            )
-            return WORK_PLACE
-
-    # Agar foydalanuvchi oddiy matn yozgan bo'lsa
-    work_place = update.message.text.strip()
-    if work_place == "-":
-        work_place = ""
-    context.user_data["work_place"] = work_place
-
-    await update.message.reply_text(
-        f"Ish joyi: {work_place or 'Korsatilmagan'}\n\n"
-        "4. Tovar nomini kiriting:\n"
-        "(Masalan: Samsung Galaxy A55)"
+        "(Yo'q bo'lsa: - yozing)"
     )
     return PRODUCT
 
 
+# TUZATISH: Bu funksiya ish joyini oladi (nom o'zgartirilmadi, mantiq tuzatildi)
 async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    product = update.message.text.strip()
-    context.user_data["product"] = product
+    # Duplicate tasdiqlash callback — bu yerda ham ishlashi kerak
+    if update.callback_query:
+        return await get_payment_type(update, context)
+
+    # Agar duplicate kutilayotgan bo'lsa, matn kelmasin
+    if context.user_data.get("awaiting_dup_confirm"):
+        return PRODUCT
+
+    work_place = update.message.text.strip()
+    if work_place in ["-", "yoq", "yo'q"]:
+        work_place = ""
+    context.user_data["work_place"] = work_place
 
     await update.message.reply_text(
-        f"Tovar: {product}\n\n"
-        "5. Tovarning jami narxini kiriting (somda):\n"
-        "(Masalan: 3500000)"
+        f"✅ Ish joyi: {work_place or 'Ko'rsatilmagan'}\n\n"
+        "4️⃣ Tovar nomini kiriting:\n"
+        "(Masalan: Samsung Galaxy A55)"
     )
     return TOTAL_PRICE
 
 
+# TUZATISH: Bu funksiya tovar nomini oladi
 async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    product = update.message.text.strip()
+    if len(product) < 2:
+        await update.message.reply_text("❌ Tovar nomi juda qisqa. Qaytadan kiriting:")
+        return TOTAL_PRICE
+    context.user_data["product"] = product
+
+    await update.message.reply_text(
+        f"✅ Tovar: {product}\n\n"
+        "5️⃣ Tovarning jami narxini kiriting (so'mda):\n"
+        "(Masalan: 3500000)"
+    )
+    return PAYMENT_TYPE
+
+
+async def get_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Duplicate tasdiqlash callback
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+
+        if query.data in ["dup_yes", "dup_no"]:
+            if query.data == "dup_no":
+                await query.edit_message_text("❌ Savdo bekor qilindi.")
+                context.user_data.clear()
+                return ConversationHandler.END
+            else:
+                context.user_data["awaiting_dup_confirm"] = False
+                phone = context.user_data["phone"]
+                await query.edit_message_text(
+                    f"✅ Telefon: {phone}\n\n"
+                    "3️⃣ Mijozning ish joyini kiriting:\n"
+                    "(Masalan: Bozor, Maktab)\n"
+                    "(Yo'q bo'lsa: - yozing)"
+                )
+                return PRODUCT
+
+        if query.data in ["pay_monthly", "pay_weekly"]:
+            if query.data == "pay_monthly":
+                context.user_data["payment_type"] = "Oylik"
+                period_word = "oyga"
+            else:
+                context.user_data["payment_type"] = "Haftalik"
+                period_word = "haftaga"
+
+            pay_type = context.user_data["payment_type"]
+            await query.edit_message_text(
+                f"✅ To'lov turi: {pay_type}\n\n"
+                f"6️⃣ Necha {period_word}?\n"
+                "(Masalan: 6)"
+            )
+            return INSTALLMENT_PERIOD
+
+        return PAYMENT_TYPE
+
+    # Jami narx kiritish (message)
     try:
         price_text = update.message.text.strip().replace(" ", "").replace(",", "")
         price = float(price_text)
         if price <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("Narx notogri. Faqat raqam kiriting:")
-        return TOTAL_PRICE
+        await update.message.reply_text("❌ Narx noto'g'ri. Faqat raqam kiriting (masalan: 3500000):")
+        return PAYMENT_TYPE
 
     context.user_data["total_price"] = price
 
     keyboard = [[
-        InlineKeyboardButton("Oylik", callback_data="pay_monthly"),
-        InlineKeyboardButton("Haftalik", callback_data="pay_weekly")
+        InlineKeyboardButton("📅 Oylik", callback_data="pay_monthly"),
+        InlineKeyboardButton("📆 Haftalik", callback_data="pay_weekly")
     ]]
     await update.message.reply_text(
-        f"Jami narx: {format_money(price)} som\n\n"
-        "6. Tolov turini tanlang:",
+        f"✅ Jami narx: {format_money(price)} so'm\n\n"
+        "6️⃣ To'lov turini tanlang:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return PAYMENT_TYPE
-
-
-async def get_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "pay_monthly":
-        context.user_data["payment_type"] = "Oylik"
-        period_word = "oyga"
-    else:
-        context.user_data["payment_type"] = "Haftalik"
-        period_word = "haftaga"
-
-    pay_type = context.user_data["payment_type"]
-    await query.edit_message_text(
-        f"Tolov turi: {pay_type}\n\n"
-        f"6. Necha {period_word}?\n"
-        "(Masalan: 6)"
-    )
-    return INSTALLMENT_PERIOD
 
 
 async def get_installment_period(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -178,7 +190,7 @@ async def get_installment_period(update: Update, context: ContextTypes.DEFAULT_T
         if period <= 0 or period > 60:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("Notogri muddat. 1-60 oraligida kiriting:")
+        await update.message.reply_text("❌ Noto'g'ri muddat. 1-60 oralig'ida kiriting:")
         return INSTALLMENT_PERIOD
 
     context.user_data["installment_period"] = period
@@ -186,9 +198,9 @@ async def get_installment_period(update: Update, context: ContextTypes.DEFAULT_T
     period_word = "oy" if pay_type == "Oylik" else "hafta"
 
     await update.message.reply_text(
-        f"Muddat: {period} {period_word}\n\n"
-        "7. Boshlangich tolov (avans) summasini kiriting:\n"
-        "(Avans yoq bolsa 0 kiriting)"
+        f"✅ Muddat: {period} {period_word}\n\n"
+        "7️⃣ Boshlang'ich to'lov (avans) summasini kiriting:\n"
+        "(Avans yo'q bo'lsa 0 kiriting)"
     )
     return DOWN_PAYMENT
 
@@ -201,7 +213,7 @@ async def get_down_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise ValueError
     except ValueError:
         total_str = format_money(context.user_data["total_price"])
-        await update.message.reply_text(f"Notogri summa. 0 dan {total_str} gacha kiriting:")
+        await update.message.reply_text(f"❌ Noto'g'ri summa. 0 dan {total_str} gacha kiriting:")
         return DOWN_PAYMENT
 
     context.user_data["down_payment"] = down
@@ -212,11 +224,11 @@ async def get_down_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     period_word = "oy" if pay_type == "Oylik" else "hafta"
 
     await update.message.reply_text(
-        f"Avans: {format_money(down)} som\n"
-        f"Qoldiq: {format_money(remaining)} som\n"
-        f"Har {period_word}: {format_money(pay_per)} som\n\n"
-        "8. Agent ismini kiriting:\n"
-        "(Yoq bolsa: - yozing)"
+        f"✅ Avans: {format_money(down)} so'm\n"
+        f"💰 Qoldiq: {format_money(remaining)} so'm\n"
+        f"📅 Har {period_word}: {format_money(pay_per)} so'm\n\n"
+        "8️⃣ Agent ismini kiriting:\n"
+        "(Yo'q bo'lsa: - yozing)"
     )
     return AGENT
 
@@ -241,8 +253,8 @@ async def get_agent(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append(row)
 
         await update.message.reply_text(
-            "9. Har oy necha-sida tolov qiladi?\n"
-            "Tolov kunini tanlang:",
+            "9️⃣ Har oy necha-sida to'lov qiladi?\n"
+            "To'lov kunini tanlang:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return PAY_DAY
@@ -258,7 +270,7 @@ async def get_pay_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     day = int(query.data.replace("payday_", ""))
     context.user_data["pay_day"] = day
 
-    await query.edit_message_text(f"Tolov kuni: har oyning {day}-si")
+    await query.edit_message_text(f"✅ To'lov kuni: har oyning {day}-si")
     return await show_confirm_callback(query, context)
 
 
@@ -270,28 +282,28 @@ async def show_confirm(update, context):
     period_word = "oy" if pay_type == "Oylik" else "hafta"
 
     summary = (
-        f"SAVDO MALUMOTLARI\n"
+        f"📋 SAVDO MA'LUMOTLARI\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Mijoz: {data['fio']}\n"
-        f"Telefon: {data['phone']}\n"
-        f"Ish joyi: {data.get('work_place', '') or 'Korsatilmagan'}\n"
-        f"Tovar: {data['product']}\n"
-        f"Jami narx: {format_money(data['total_price'])} som\n"
-        f"Avans: {format_money(data.get('down_payment', 0))} som\n"
-        f"Qoldiq: {format_money(remaining)} som\n"
-        f"Tolov turi: {pay_type}\n"
-        f"Muddat: {data['installment_period']} {period_word}\n"
-        f"Har {period_word}: {format_money(pay_per)} som\n"
+        f"👤 Mijoz: {data['fio']}\n"
+        f"📞 Telefon: {data['phone']}\n"
+        f"🏢 Ish joyi: {data.get('work_place', '') or 'Ko'rsatilmagan'}\n"
+        f"🛍 Tovar: {data['product']}\n"
+        f"💵 Jami narx: {format_money(data['total_price'])} so'm\n"
+        f"💳 Avans: {format_money(data.get('down_payment', 0))} so'm\n"
+        f"💰 Qoldiq: {format_money(remaining)} so'm\n"
+        f"📅 To'lov turi: {pay_type}\n"
+        f"🗓 Muddat: {data['installment_period']} {period_word}\n"
+        f"📆 Har {period_word}: {format_money(pay_per)} so'm\n"
     )
     if data.get("pay_day"):
-        summary += f"Tolov kuni: har oyning {data['pay_day']}-si\n"
+        summary += f"🔔 To'lov kuni: har oyning {data['pay_day']}-si\n"
     if data.get("agent"):
-        summary += f"Agent: {data['agent']}\n"
+        summary += f"👨‍💼 Agent: {data['agent']}\n"
     summary += "━━━━━━━━━━━━━━━━━━━━"
 
     keyboard = [[
-        InlineKeyboardButton("Tasdiqlash", callback_data="confirm_yes"),
-        InlineKeyboardButton("Bekor qilish", callback_data="confirm_no")
+        InlineKeyboardButton("✅ Tasdiqlash", callback_data="confirm_yes"),
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="confirm_no")
     ]]
     await update.message.reply_text(
         summary,
@@ -308,28 +320,28 @@ async def show_confirm_callback(query, context):
     period_word = "oy" if pay_type == "Oylik" else "hafta"
 
     summary = (
-        f"SAVDO MALUMOTLARI\n"
+        f"📋 SAVDO MA'LUMOTLARI\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Mijoz: {data['fio']}\n"
-        f"Telefon: {data['phone']}\n"
-        f"Ish joyi: {data.get('work_place', '') or 'Korsatilmagan'}\n"
-        f"Tovar: {data['product']}\n"
-        f"Jami narx: {format_money(data['total_price'])} som\n"
-        f"Avans: {format_money(data.get('down_payment', 0))} som\n"
-        f"Qoldiq: {format_money(remaining)} som\n"
-        f"Tolov turi: {pay_type}\n"
-        f"Muddat: {data['installment_period']} {period_word}\n"
-        f"Har {period_word}: {format_money(pay_per)} som\n"
+        f"👤 Mijoz: {data['fio']}\n"
+        f"📞 Telefon: {data['phone']}\n"
+        f"🏢 Ish joyi: {data.get('work_place', '') or 'Ko'rsatilmagan'}\n"
+        f"🛍 Tovar: {data['product']}\n"
+        f"💵 Jami narx: {format_money(data['total_price'])} so'm\n"
+        f"💳 Avans: {format_money(data.get('down_payment', 0))} so'm\n"
+        f"💰 Qoldiq: {format_money(remaining)} so'm\n"
+        f"📅 To'lov turi: {pay_type}\n"
+        f"🗓 Muddat: {data['installment_period']} {period_word}\n"
+        f"📆 Har {period_word}: {format_money(pay_per)} so'm\n"
     )
     if data.get("pay_day"):
-        summary += f"Tolov kuni: har oyning {data['pay_day']}-si\n"
+        summary += f"🔔 To'lov kuni: har oyning {data['pay_day']}-si\n"
     if data.get("agent"):
-        summary += f"Agent: {data['agent']}\n"
+        summary += f"👨‍💼 Agent: {data['agent']}\n"
     summary += "━━━━━━━━━━━━━━━━━━━━"
 
     keyboard = [[
-        InlineKeyboardButton("Tasdiqlash", callback_data="confirm_yes"),
-        InlineKeyboardButton("Bekor qilish", callback_data="confirm_no")
+        InlineKeyboardButton("✅ Tasdiqlash", callback_data="confirm_yes"),
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="confirm_no")
     ]]
     await query.message.reply_text(
         summary,
@@ -342,44 +354,48 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "payday_" or query.data.startswith("payday_"):
+    # payday_ callback bu yerga kelmasligi kerak, lekin xavfsizlik uchun
+    if query.data.startswith("payday_"):
         return await get_pay_day(update, context)
 
     if query.data == "confirm_no":
-        await query.edit_message_text("Savdo bekor qilindi.")
+        await query.edit_message_text("❌ Savdo bekor qilindi.")
         context.user_data.clear()
         return ConversationHandler.END
 
-    await query.edit_message_text("Malumotlar saqlanmoqda...")
+    if query.data != "confirm_yes":
+        return CONFIRM
+
+    await query.edit_message_text("⏳ Ma'lumotlar saqlanmoqda...")
 
     try:
         result = add_sale(context.user_data)
-        schedule_text = "TOLOV JADVALI:\n"
+        schedule_text = "📅 TO'LOV JADVALI:\n"
         for item in result["schedule"][:6]:
             amount_str = format_money(item["amount"])
             remaining_str = format_money(item["remaining"])
             schedule_text += (
-                f"{item['num']}. {item['date']} - "
-                f"{amount_str} som "
+                f"{item['num']}. {item['date']} — "
+                f"{amount_str} so'm "
                 f"(qoldiq: {remaining_str})\n"
             )
         if len(result["schedule"]) > 6:
-            schedule_text += f"... va yana {len(result['schedule'])-6} ta tolov\n"
+            schedule_text += f"... va yana {len(result['schedule'])-6} ta to'lov\n"
 
         success_msg = (
-            f"SAVDO SAQLANDI!\n"
+            f"✅ SAVDO SAQLANDI!\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"Savdo ID: {result['sale_id']}\n"
-            f"Qoldiq: {format_money(result['remaining'])} som\n"
-            f"Har tolov: {format_money(result['payment_per_period'])} som\n"
-            f"Birinchi tolov: {result['next_payment']}\n\n"
+            f"🆔 Savdo ID: {result['sale_id']}\n"
+            f"💰 Qoldiq: {format_money(result['remaining'])} so'm\n"
+            f"📆 Har to'lov: {format_money(result['payment_per_period'])} so'm\n"
+            f"📅 Birinchi to'lov: {result['next_payment']}\n\n"
             f"{schedule_text}\n"
-            f"Google Sheets ga saqlandi"
+            f"✅ Google Sheets ga saqlandi"
         )
         await query.edit_message_text(success_msg)
 
     except Exception as e:
-        await query.edit_message_text(f"Xatolik: {str(e)}\n\nQaytadan: /savdo")
+        await query.edit_message_text(f"❌ Xatolik: {str(e)}\n\nQaytadan: /savdo")
 
     context.user_data.clear()
     return ConversationHandler.END
@@ -410,6 +426,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [KeyboardButton("🏠 Bosh Menyu")],
         ], resize_keyboard=True)
 
-    await update.message.reply_text("Bosh menyuga qaytildi.", reply_markup=keyboard)
+    await update.message.reply_text("🏠 Bosh menyuga qaytildi.", reply_markup=keyboard)
     context.user_data.clear()
     return ConversationHandler.END

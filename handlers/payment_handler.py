@@ -29,6 +29,16 @@ async def start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def payment_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = update.message.text.strip()
+
+    # TUZATISH: Telefon validatsiyasi qo'shildi
+    clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+    if not clean_phone.isdigit() or len(clean_phone) < 9:
+        await update.message.reply_text(
+            "❌ Telefon raqami noto'g'ri.\n"
+            "To'g'ri kiriting: +998901234567"
+        )
+        return PAY_PHONE
+
     context.user_data["pay_phone"] = phone
     await update.message.reply_text(
         f"✅ Telefon: `{phone}`\n\n"
@@ -46,17 +56,15 @@ async def payment_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if amount <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("❌ Noto'g'ri summa. Qaytadan kiriting:")
+        await update.message.reply_text("❌ Noto'g'ri summa. Faqat raqam kiriting (masalan: 500000):")
         return PAY_AMOUNT
 
     context.user_data["pay_amount"] = amount
 
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Tasdiqlash", callback_data="pay_yes"),
-            InlineKeyboardButton("❌ Bekor", callback_data="pay_no")
-        ]
-    ]
+    keyboard = [[
+        InlineKeyboardButton("✅ Tasdiqlash", callback_data="pay_yes"),
+        InlineKeyboardButton("❌ Bekor", callback_data="pay_no")
+    ]]
 
     phone = context.user_data["pay_phone"]
     await update.message.reply_text(
@@ -78,6 +86,7 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "pay_no":
         await query.edit_message_text("❌ To'lov bekor qilindi.")
+        context.user_data.clear()
         return ConversationHandler.END
 
     await query.edit_message_text("⏳ To'lov qayd etilmoqda...")
@@ -94,6 +103,7 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"❌ Xatolik: {error_msg}\n\n"
                 "Telefon raqamini tekshiring va qaytadan urinib ko'ring."
             )
+            context.user_data.clear()
             return ConversationHandler.END
 
         fio = result["fio"]
@@ -132,7 +142,7 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Mijozga xabar
         client_chat_id = get_client_chat_id(phone)
-        if client_chat_id and client_chat_id.strip():
+        if client_chat_id and str(client_chat_id).strip():
             try:
                 if result["is_closed"]:
                     client_msg = (
@@ -148,7 +158,7 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     client_msg = (
                         "✅ *To'lovingiz qabul qilindi!*\n\n"
                         f"💵 To'langan summa: *{paid} so'm*\n"
-                        f"💰 Qoldigingiz: *{new_rem} so'm*\n"
+                        f"💰 Qoldig'ingiz: *{new_rem} so'm*\n"
                         f"📅 Keyingi to'lov: *{next_pay}*\n\n"
                         f"🎁 Bonus hisobingiz: *{bonus} so'm*\n\n"
                         "Rahmat! TexnoVibe 🏪"
@@ -160,7 +170,7 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="Markdown"
                 )
             except Exception:
-                pass
+                pass  # Mijoz bot bilan suhbat boshlamamagan bo'lishi mumkin
 
     except Exception as e:
         await query.edit_message_text(

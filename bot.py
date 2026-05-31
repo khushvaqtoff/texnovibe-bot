@@ -11,13 +11,12 @@ from telegram.ext import (
     CallbackQueryHandler, ConversationHandler, filters
 )
 from dotenv import load_dotenv
-
 from handlers.sale_handler import (
     start_sale, get_name, get_phone, get_product,
     get_total_price, get_payment_type, get_installment_period,
     get_down_payment, get_agent, get_pay_day, confirm_sale, cancel,
     NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
-    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, WORK_PLACE, PAY_DAY, CONFIRM
+    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, CONFIRM
 )
 from handlers.payment_handler import (
     start_payment, payment_phone, payment_amount, payment_confirm,
@@ -55,6 +54,7 @@ from handlers.order_handler import (
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -98,10 +98,48 @@ def get_client_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
+# ✅ FIX 1: cmd_start main()dan OLDIN aniqlandi
+async def cmd_start(update: Update, context):
+    user_id = update.effective_user.id
+    if is_admin(user_id):
+        text = (
+            "🏪 *TexnoVibe Nasiya Bot — Admin Panel*\n\n"
+            "Quyidagi tugmalardan foydalaning 👇"
+        )
+        await update.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=get_admin_keyboard()
+        )
+    else:
+        text = (
+            "🏪 *TexnoVibe Nasiya Bot*\n\n"
+            "Assalomu alaykum! 👋\n"
+            "Quyidagi tugmalardan foydalaning 👇"
+        )
+        await update.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=get_client_keyboard()
+        )
+
+
+async def cmd_search_prompt(update: Update, context):
+    """Qidirish tugmasi bosilganda"""
+    await update.message.reply_text(
+        "🔍 *Qidirish*\n\n"
+        "Ism yoki telefon bo'yicha:\n"
+        "`/qidir Anvarov`\n"
+        "`/qidir +998901234567`\n\n"
+        "To'lov tarixi:\n"
+        "`/tarix +998901234567`",
+        parse_mode="Markdown"
+    )
+
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Bekor qilish handleri (barcha conversationlar uchun)
     bekor_filter = filters.Regex("^🚫 Bekor Qilish$") | filters.Regex("^/bekor$")
     home_filter = filters.Regex("^🏠 Bosh Menyu$")
 
@@ -123,7 +161,6 @@ def main():
                 CallbackQueryHandler(get_payment_type),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
             ],
-
             PRODUCT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -149,7 +186,6 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
             ],
-
             AGENT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -281,8 +317,6 @@ def main():
         conversation_timeout=300,
     )
 
-    app.add_handler(register_conv)
-
     # === KATALOG QOSHISH (admin) ===
     catalog_add_conv = ConversationHandler(
         entry_points=[
@@ -317,7 +351,6 @@ def main():
         ],
         conversation_timeout=300,
     )
-    app.add_handler(catalog_add_conv)
 
     # === BUYURTMA BERISH (mijoz) ===
     order_conv = ConversationHandler(
@@ -346,7 +379,6 @@ def main():
         ],
         conversation_timeout=300,
     )
-    app.add_handler(order_conv)
 
     # === QIDIRISH CONVERSATION ===
     search_conv = ConversationHandler(
@@ -368,6 +400,11 @@ def main():
         ],
         conversation_timeout=120,
     )
+
+    # === HANDLERLARNI QO'SHISH ===
+    app.add_handler(register_conv)
+    app.add_handler(catalog_add_conv)
+    app.add_handler(order_conv)
     app.add_handler(search_conv)
     app.add_handler(sale_conv)
     app.add_handler(payment_conv)
@@ -386,13 +423,14 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
     app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_export))
 
-
     # === BOX MENYU HANDLERI ===
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
 
     # === MIJOZ TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Kreditim$"), cmd_mening_malumotlarim))
 
+    # ✅ FIX 3: cmd_register handler qo'shildi
+    app.add_handler(CommandHandler("register", cmd_register))
 
     # === BUYRUQLAR ===
     app.add_handler(CommandHandler("tarix", cmd_history))
@@ -424,55 +462,6 @@ def main():
 
     logger.info("✅ TexnoVibe Bot ishga tushdi!")
     app.run_polling(drop_pending_updates=True)
-
-
-async def cmd_start(update: Update, context):
-    user_id = update.effective_user.id
-
-    if is_admin(user_id):
-        text = (
-            "🏪 *TexnoVibe Nasiya Bot — Admin Panel*\n\n"
-            "Quyidagi tugmalardan foydalaning 👇"
-        )
-        await update.message.reply_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=get_admin_keyboard()
-        )
-    else:
-        text = (
-            "🏪 *TexnoVibe Nasiya Bot*\n\n"
-            "Assalomu alaykum! 👋\n"
-            "Quyidagi tugmalardan foydalaning 👇"
-        )
-        await update.message.reply_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=get_client_keyboard()
-        )
-
-
-async def cmd_search_prompt(update: Update, context):
-    """Qidirish tugmasi bosilganda"""
-    await update.message.reply_text(
-        "🔍 *Qidirish*\n\n"
-        "Ism yoki telefon bo'yicha:\n"
-        "`/qidir Anvarov`\n"
-        "`/qidir +998901234567`\n\n"
-        "To'lov tarixi:\n"
-        "`/tarix +998901234567`",
-        parse_mode="Markdown"
-    )
-
-
-async def cmd_register_prompt(update: Update, context):
-    """Ro'yxatdan o'tish tugmasi bosilganda"""
-    await update.message.reply_text(
-        "📝 *Royxatdan otish*\n\n"
-        "Telefon raqamingizni yozing:\n"
-        "`/royhattan_otish +998901234567`",
-        parse_mode="Markdown"
-    )
 
 
 if __name__ == "__main__":
