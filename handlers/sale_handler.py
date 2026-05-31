@@ -49,29 +49,32 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting:")
         return PHONE
 
-    dup = check_duplicate(phone)
-    if dup["exists"]:
-        fio = dup["fio"]
-        product = dup["product"]
-        remaining = format_money(dup["remaining"])
-        keyboard = [[
-            InlineKeyboardButton("✅ Ha, qo'shaman", callback_data="dup_yes"),
-            InlineKeyboardButton("❌ Yo'q, bekor", callback_data="dup_no")
-        ]]
-        await update.message.reply_text(
-            f"⚠️ Diqqat! Bu telefon bazada bor!\n\n"
-            f"👤 Mijoz: {fio}\n"
-            f"🛍 Tovar: {product}\n"
-            f"💰 Qoldiq: {remaining} so'm\n\n"
-            f"Shunda ham yangi savdo qo'shaveraymi?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        context.user_data["phone"] = phone
-        context.user_data["awaiting_dup_confirm"] = True
-        # TUZATISH: PRODUCT holatiga o'tamiz — duplicate tasdiqlash shu yerda
-        return PRODUCT
-
     context.user_data["phone"] = phone
+    await update.message.reply_text("⏳ Tekshirilmoqda...")
+
+    try:
+        dup = check_duplicate(phone)
+        if dup["exists"]:
+            fio = dup["fio"]
+            product = dup["product"]
+            remaining = format_money(dup["remaining"])
+            keyboard = [[
+                InlineKeyboardButton("✅ Ha, qo'shaman", callback_data="dup_yes"),
+                InlineKeyboardButton("❌ Yo'q, bekor", callback_data="dup_no")
+            ]]
+            await update.message.reply_text(
+                f"⚠️ Diqqat! Bu telefon bazada bor!\n\n"
+                f"👤 Mijoz: {fio}\n"
+                f"🛍 Tovar: {product}\n"
+                f"💰 Qoldiq: {remaining} so'm\n\n"
+                f"Shunda ham yangi savdo qo'shaveraymi?",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            context.user_data["awaiting_dup_confirm"] = True
+            return PRODUCT
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Baza tekshirishda xato: {str(e)}\nDavom etilmoqda...")
+
     await update.message.reply_text(
         f"✅ Telefon: {phone}\n\n"
         "3️⃣ Mijozning ish joyini kiriting:\n"
