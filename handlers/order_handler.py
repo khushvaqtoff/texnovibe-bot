@@ -100,7 +100,7 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         desc = selected.get("Tavsif", "")
 
         text = (
-            "Tanlangan tovar:
+            "Tanlangan tovar:"
 
 "
             f"Nomi: {name}
