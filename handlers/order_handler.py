@@ -99,7 +99,7 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = format_money(selected.get("Narx", 0))
         desc = selected.get("Tavsif", "")
 
-        # Matndagi sintaktik xatolik tuzatildi
+        # Bu yerdagi matn xatoliklari to'g'rilandi
         text = (
             "Tanlangan tovar:\n\n"
             f"Nomi: {name}\n"
@@ -132,7 +132,7 @@ async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = selected.get("Tovar Nomi", "")
     price = format_money(selected.get("Narx", 0))
 
-    # Matndagi sintaktik xatolik tuzatildi
+    # Bu yerdagi matn xatoliklari to'g'rilandi
     text = (
         "Buyurtma tasdiqlash:\n\n"
         f"Tovar: {name}\n"
@@ -220,7 +220,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             work_place
         ])
 
-        # Adminga xabar - matndagi sintaktik xatolik tuzatildi
+        # Adminga xabar yuborish qismidagi matn xatoliklari to'g'rilandi
         tg_username = f"@{user.username}" if user.username else "Yo'q"
         work_place = context.user_data.get("order_workplace", "")
         admin_msg = (
