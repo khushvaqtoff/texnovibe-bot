@@ -117,13 +117,12 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_name),
             ],
-            PHONE: [
+          PHONE: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
-                CallbackQueryHandler(get_payment_type),
+                CallbackQueryHandler(get_payment_type), # Dublikat tekshiruvi uchun
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
             ],
-
             PRODUCT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -137,7 +136,7 @@ def main():
             PAYMENT_TYPE: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
-                CallbackQueryHandler(get_payment_type),
+                CallbackQueryHandler(get_payment_type), # Faqat tugma bosilishini kutadi
             ],
             INSTALLMENT_PERIOD: [
                 MessageHandler(home_filter, cancel),
