@@ -101,23 +101,16 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = (
             "Tanlangan tovar:"
-
-"
-            f"Nomi: {name}
-"
-            f"Narx: {price} som
-"
+            f"Nomi: {name}"
+            f"Narx: {price} som"
         )
         if desc:
-            text += f"Tavsif: {desc}
-"
+            text += f"Tavsif: {desc}"
 
         await query.edit_message_text(text)
         await query.message.reply_text(
-            "Ish joyingizni kiriting:
-"
-            "(Masalan: Bozor, Maktab, Xususiy)
-"
+            "Ish joyingizni kiriting:"
+            "(Masalan: Bozor, Maktab, Xususiy)"
             "(Yoq bolsa: - yozing)"
         )
         return ORDER_WORKPLACE
