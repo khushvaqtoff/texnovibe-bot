@@ -85,7 +85,7 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         products = get_active_products()
         selected = None
         for rec in products:
-            if str(rec.get("ID")) == str(cat_id):
+            if rec.get("ID") == cat_id:
                 selected = rec
                 break
 
@@ -99,9 +99,9 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = format_money(selected.get("Narx", 0))
         desc = selected.get("Tavsif", "")
 
-        # TUZATILGAN JOY: Bir necha qatorli matn uchun """ ishlatildi
+        # Matndagi sintaktik xatolik tuzatildi
         text = (
-            f"Tanlangan tovar:\n\n"
+            "Tanlangan tovar:\n\n"
             f"Nomi: {name}\n"
             f"Narx: {price} som\n"
         )
@@ -109,12 +109,10 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"Tavsif: {desc}\n"
 
         await query.edit_message_text(text)
-        
-        # TUZATILGAN JOY: Matn strukturasi va qatorlar to'g'rilandi
         await query.message.reply_text(
             "Ish joyingizni kiriting:\n"
             "(Masalan: Bozor, Maktab, Xususiy)\n"
-            "(Yo'q bo'lsa: - yozing)"
+            "(Yoq bolsa: - yozing)"
         )
         return ORDER_WORKPLACE
 
@@ -134,9 +132,9 @@ async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = selected.get("Tovar Nomi", "")
     price = format_money(selected.get("Narx", 0))
 
-    # TUZATILGAN JOY: F-string matni uchta qo'shtirnoqqa olindi
+    # Matndagi sintaktik xatolik tuzatildi
     text = (
-        f"Buyurtma tasdiqlash:\n\n"
+        "Buyurtma tasdiqlash:\n\n"
         f"Tovar: {name}\n"
         f"Narx: {price} som\n"
         f"Ish joyi: {work_place or 'Korsatilmagan'}\n\n"
@@ -168,6 +166,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected = context.user_data.get("order_product", {})
     name = selected.get("Tovar Nomi", "")
     price = format_money(selected.get("Narx", 0))
+    cat_id = selected.get("ID", "")
     today = date.today().strftime("%d.%m.%Y %H:%M")
 
     # Mijozga tasdiqlash xabari
@@ -179,6 +178,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"TexnoVibe"
     )
 
+    # Mijoz ma'lumotlarini topish
     try:
         sh = get_spreadsheet()
         from sheets.google_sheets import ensure_worksheets
@@ -195,11 +195,12 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
 
         # Buyurtmani Google Sheets ga saqlash
+        ws_orders = None
         existing = [ws.title for ws in sh.worksheets()]
         if "Buyurtmalar" not in existing:
-            ws_orders = sh.add_worksheet(title="Buyurtmalar", rows=500, cols=9)
+            ws_orders = sh.add_worksheet(title="Buyurtmalar", rows=500, cols=8)
             ws_orders.append_row(["ID", "Sana", "FIO", "Telefon", "Chat ID", "Tovar", "Narx", "Holat", "Ish Joyi"])
-            ws_orders.format("A1:I1", {"textFormat": {"bold": True}, "backgroundColor": {"red": 1.0, "green": 0.6, "blue": 0.0}})
+            ws_orders.format("A1:H1", {"textFormat": {"bold": True}, "backgroundColor": {"red": 1.0, "green": 0.6, "blue": 0.0}})
         else:
             ws_orders = sh.worksheet("Buyurtmalar")
 
@@ -219,11 +220,11 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             work_place
         ])
 
-        # Adminga xabar
+        # Adminga xabar - matndagi sintaktik xatolik tuzatildi
         tg_username = f"@{user.username}" if user.username else "Yo'q"
-        # TUZATILGAN JOY: Admin xabari f-string formati va qator o'tishlari to'g'rilandi
+        work_place = context.user_data.get("order_workplace", "")
         admin_msg = (
-            f"YANGI BUYURTMA!\n\n"
+            "YANGI BUYURTMA!\n\n"
             f"Buyurtma ID: {order_id}\n"
             f"Sana: {today}\n\n"
             f"Mijoz: {client_fio or user.full_name}\n"
@@ -271,6 +272,7 @@ async def cmd_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         sh = get_spreadsheet()
+        from sheets.google_sheets import ensure_worksheets
         existing = [ws.title for ws in sh.worksheets()]
 
         if "Buyurtmalar" not in existing:
@@ -284,11 +286,13 @@ async def cmd_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Hali hech qanday buyurtma yoq.")
             return
 
+        # Yangi buyurtmalar
         yangi = [r for r in records if r.get("Holat") == "Yangi"]
         all_orders = records
 
         text = f"BUYURTMALAR ({len(all_orders)} ta jami | {len(yangi)} ta yangi)\n\n"
 
+        # Oxirgi 20 ta
         for rec in reversed(all_orders[-20:]):
             holat = rec.get("Holat", "")
             if holat == "Yangi":
