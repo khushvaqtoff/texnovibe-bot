@@ -222,31 +222,18 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tg_username = f"@{user.username}" if user.username else "Yo'q"
         work_place = context.user_data.get("order_workplace", "")
         admin_msg = (
-            "YANGI BUYURTMA!
-
-"
-            f"Buyurtma ID: {order_id}
-"
-            f"Sana: {today}
-
-"
-            f"Mijoz: {client_fio or user.full_name}
-"
-            f"Telefon: {client_phone or 'Royxatdan otmagan'}
-"
-            f"Telegram: {tg_username}
-"
-            f"Chat ID: {user.id}
-
-"
-            f"Tovar: {name}
-"
-            f"Narx: {price} som
-"
+            "YANGI BUYURTMA!"
+            f"Buyurtma ID: {order_id}"
+            f"Sana: {today}"
+            f"Mijoz: {client_fio or user.full_name}"
+            f"Telefon: {client_phone or 'Royxatdan otmagan'}"
+            f"Telegram: {tg_username}"
+            f"Chat ID: {user.id}"
+            f"Tovar: {name}"
+            f"Narx: {price} som"
         )
         if work_place:
-            admin_msg += f"Ish joyi: {work_place}
-"
+            admin_msg += f"Ish joyi: {work_place}"
 
         await query.get_bot().send_message(
             chat_id=ADMIN_CHAT_ID,
