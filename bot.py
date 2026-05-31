@@ -105,11 +105,11 @@ def main():
     bekor_filter = filters.Regex("^🚫 Bekor Qilish$") | filters.Regex("^/bekor$")
     home_filter = filters.Regex("^🏠 Bosh Menyu$")
 
-   # ➕ YANGI SAVDO CONVERSATION HANDLER
+    # === SAVDO KIRITISH ===
     sale_conv = ConversationHandler(
         entry_points=[
+            CommandHandler("savdo", start_sale),
             MessageHandler(filters.Regex("^➕ Yangi Savdo$"), start_sale),
-            CommandHandler("savdo", start_sale)
         ],
         states={
             NAME: [
@@ -120,14 +120,10 @@ def main():
             PHONE: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_payment_type),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
             ],
-            WORK_PLACE: [
-                MessageHandler(home_filter, cancel),
-                MessageHandler(bekor_filter, cancel),
-                CallbackQueryHandler(get_work_place, pattern="^dup_"),  # Dublikat tasdiqlash tugmalari uchun
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_work_place), # Ish joyini matn sifatida qabul qilish
-            ],
+
             PRODUCT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -141,7 +137,7 @@ def main():
             PAYMENT_TYPE: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
-                CallbackQueryHandler(get_payment_type, pattern="^pay_"),  # Oylik/Haftalik tugmalari uchun
+                CallbackQueryHandler(get_payment_type),
             ],
             INSTALLMENT_PERIOD: [
                 MessageHandler(home_filter, cancel),
@@ -153,25 +149,30 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_down_payment),
             ],
+
             AGENT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_agent),
             ],
             PAY_DAY: [
-                CallbackQueryHandler(get_pay_day, pattern="^payday_"),
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_pay_day),
             ],
             CONFIRM: [
-                CallbackQueryHandler(confirm_sale, pattern="^confirm_"),
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(confirm_sale),
             ],
         },
         fallbacks=[
-            CommandHandler("cancel", cancel),
+            CommandHandler("bekor", cancel),
+            CommandHandler("start", cancel),
+            MessageHandler(bekor_filter, cancel),
             MessageHandler(home_filter, cancel),
-            MessageHandler(bekor_filter, cancel)
         ],
-        name="sale_conversation",
-        persistent=False
+        conversation_timeout=300,
     )
 
     # === TO'LOV QABUL QILISH ===
