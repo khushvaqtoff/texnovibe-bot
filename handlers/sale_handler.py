@@ -97,7 +97,7 @@ async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["work_place"] = work_place
 
     await update.message.reply_text(
-        f"✅ Ish joyi: {work_place or 'Ko'rsatilmagan'}\n\n"
+        f"✅ Ish joyi: {work_place or 'Korsatilmagan'}\n\n"
         "4️⃣ Tovar nomini kiriting:\n"
         "(Masalan: Samsung Galaxy A55)"
     )
@@ -286,7 +286,7 @@ async def show_confirm(update, context):
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 Mijoz: {data['fio']}\n"
         f"📞 Telefon: {data['phone']}\n"
-        f"🏢 Ish joyi: {data.get('work_place', '') or 'Ko'rsatilmagan'}\n"
+        f"🏢 Ish joyi: {data.get('work_place', '') or 'Korsatilmagan'}\n"
         f"🛍 Tovar: {data['product']}\n"
         f"💵 Jami narx: {format_money(data['total_price'])} so'm\n"
         f"💳 Avans: {format_money(data.get('down_payment', 0))} so'm\n"
@@ -324,7 +324,7 @@ async def show_confirm_callback(query, context):
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 Mijoz: {data['fio']}\n"
         f"📞 Telefon: {data['phone']}\n"
-        f"🏢 Ish joyi: {data.get('work_place', '') or 'Ko'rsatilmagan'}\n"
+        f"🏢 Ish joyi: {data.get('work_place', '') or 'Korsatilmagan'}\n"
         f"🛍 Tovar: {data['product']}\n"
         f"💵 Jami narx: {format_money(data['total_price'])} so'm\n"
         f"💳 Avans: {format_money(data.get('down_payment', 0))} so'm\n"

@@ -138,7 +138,7 @@ async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🛍 Tovar: {name}\n"
         f"💵 Narx: {price} so'm\n"
-        f"🏢 Ish joyi: {work_place or 'Ko'rsatilmagan'}\n"
+        f"🏢 Ish joyi: {work_place or 'Korsatilmagan'}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"Tasdiqlaysizmi?"
     )
@@ -226,7 +226,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🆔 Buyurtma ID: {order_id}\n"
             f"📅 Sana: {today}\n"
             f"👤 Mijoz: {client_fio or user.full_name}\n"
-            f"📞 Telefon: {client_phone or 'Ro'yxatdan o'tmagan'}\n"
+            f"📞 Telefon: {client_phone or 'Royxatdan otmagan'}\n"
             f"💬 Telegram: {tg_username}\n"
             f"🔢 Chat ID: {user.id}\n"
             f"🛍 Tovar: {name}\n"
