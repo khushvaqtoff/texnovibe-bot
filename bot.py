@@ -164,6 +164,7 @@ def main():
             PRODUCT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_product),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_product),
             ],
             TOTAL_PRICE: [

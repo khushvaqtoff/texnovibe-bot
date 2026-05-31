@@ -83,11 +83,27 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # TUZATISH: Bu funksiya ish joyini oladi (nom o'zgartirilmadi, mantiq tuzatildi)
 async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Duplicate tasdiqlash callback — bu yerda ham ishlashi kerak
+    # Duplicate tasdiqlash callback (dup_yes / dup_no)
     if update.callback_query:
-        return await get_payment_type(update, context)
+        query = update.callback_query
+        await query.answer()
+        if query.data == "dup_no":
+            await query.edit_message_text("❌ Savdo bekor qilindi.")
+            context.user_data.clear()
+            return ConversationHandler.END
+        elif query.data == "dup_yes":
+            context.user_data["awaiting_dup_confirm"] = False
+            phone = context.user_data["phone"]
+            await query.edit_message_text(
+                f"✅ Telefon: {phone}\n\n"
+                "3️⃣ Mijozning ish joyini kiriting:\n"
+                "(Masalan: Bozor, Maktab)\n"
+                "(Yo'q bo'lsa: - yozing)"
+            )
+            return PRODUCT
+        return PRODUCT
 
-    # Agar duplicate kutilayotgan bo'lsa, matn kelmasin
+    # Agar duplicate hali tasdiqlanmagan bo'lsa, matn kelmasin
     if context.user_data.get("awaiting_dup_confirm"):
         return PRODUCT
 
