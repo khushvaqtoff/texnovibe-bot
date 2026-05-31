@@ -99,19 +99,25 @@ async def order_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = format_money(selected.get("Narx", 0))
         desc = selected.get("Tavsif", "")
 
-        # Bu yerdagi matn xatoliklari to'g'rilandi
         text = (
-            "Tanlangan tovar:\n\n"
-            f"Nomi: {name}\n"
-            f"Narx: {price} som\n"
+            "Tanlangan tovar:
+
+"
+            f"Nomi: {name}
+"
+            f"Narx: {price} som
+"
         )
         if desc:
-            text += f"Tavsif: {desc}\n"
+            text += f"Tavsif: {desc}
+"
 
         await query.edit_message_text(text)
         await query.message.reply_text(
-            "Ish joyingizni kiriting:\n"
-            "(Masalan: Bozor, Maktab, Xususiy)\n"
+            "Ish joyingizni kiriting:
+"
+            "(Masalan: Bozor, Maktab, Xususiy)
+"
             "(Yoq bolsa: - yozing)"
         )
         return ORDER_WORKPLACE
@@ -132,12 +138,17 @@ async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = selected.get("Tovar Nomi", "")
     price = format_money(selected.get("Narx", 0))
 
-    # Bu yerdagi matn xatoliklari to'g'rilandi
     text = (
-        "Buyurtma tasdiqlash:\n\n"
-        f"Tovar: {name}\n"
-        f"Narx: {price} som\n"
-        f"Ish joyi: {work_place or 'Korsatilmagan'}\n\n"
+        "Buyurtma tasdiqlash:
+
+"
+        f"Tovar: {name}
+"
+        f"Narx: {price} som
+"
+        f"Ish joyi: {work_place or 'Korsatilmagan'}
+
+"
         f"Tasdiqlaysizmi?"
     )
     keyboard = [
@@ -220,22 +231,35 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             work_place
         ])
 
-        # Adminga xabar yuborish qismidagi matn xatoliklari to'g'rilandi
+        # Adminga xabar
         tg_username = f"@{user.username}" if user.username else "Yo'q"
         work_place = context.user_data.get("order_workplace", "")
         admin_msg = (
-            "YANGI BUYURTMA!\n\n"
-            f"Buyurtma ID: {order_id}\n"
-            f"Sana: {today}\n\n"
-            f"Mijoz: {client_fio or user.full_name}\n"
-            f"Telefon: {client_phone or 'Royxatdan otmagan'}\n"
-            f"Telegram: {tg_username}\n"
-            f"Chat ID: {user.id}\n\n"
-            f"Tovar: {name}\n"
-            f"Narx: {price} som\n"
+            "YANGI BUYURTMA!
+
+"
+            f"Buyurtma ID: {order_id}
+"
+            f"Sana: {today}
+
+"
+            f"Mijoz: {client_fio or user.full_name}
+"
+            f"Telefon: {client_phone or 'Royxatdan otmagan'}
+"
+            f"Telegram: {tg_username}
+"
+            f"Chat ID: {user.id}
+
+"
+            f"Tovar: {name}
+"
+            f"Narx: {price} som
+"
         )
         if work_place:
-            admin_msg += f"Ish joyi: {work_place}\n"
+            admin_msg += f"Ish joyi: {work_place}
+"
 
         await query.get_bot().send_message(
             chat_id=ADMIN_CHAT_ID,
