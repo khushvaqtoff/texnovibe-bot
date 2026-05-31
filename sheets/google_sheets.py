@@ -177,6 +177,15 @@ def generate_payment_schedule(remaining, per_payment, pay_type, periods, start_d
     return schedule
 
 
+def safe_float(val, default=0):
+    """Xavfsiz float konversiya"""
+    try:
+        v = str(val).replace(" ", "").replace(",", "").strip()
+        return float(v) if v else default
+    except:
+        return default
+
+
 def record_payment(phone: str, amount: float) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
@@ -198,7 +207,7 @@ def record_payment(phone: str, amount: float) -> dict:
                 break
     if not target_row:
         return {"success": False, "error": "Mijoz topilmadi yoki qarzi yoq"}
-    old_remaining = float(target_row.get("Qoldiq", 0))
+    old_remaining = safe_float(target_row.get("Qoldiq", 0))
     new_remaining = max(0, old_remaining - amount)
     today = date.today()
     pay_type = target_row.get("To'lov Turi", "Oylik")
@@ -206,7 +215,7 @@ def record_payment(phone: str, amount: float) -> dict:
     ws_sales.update_cell(row_index, 8, new_remaining)
     ws_sales.update_cell(row_index, 12, next_date.strftime("%d.%m.%Y"))
     # Tolangan summani yangilash (21-ustun)
-    old_paid = float(target_row.get("To'langan Summa", 0) or 0)
+    old_paid = safe_float(target_row.get("To'langan Summa", 0))
     new_paid = old_paid + amount
     ws_sales.update_cell(row_index, 21, new_paid)
     if new_remaining == 0:
@@ -215,8 +224,8 @@ def record_payment(phone: str, amount: float) -> dict:
     # Bonus hisoblash:
     # - Oylik to'lovni to'liq to'lasa: oylik summaning 2%
     # - Oylikdan kam to'lasa: to'langan summaning 2%
-    current_bonus = float(target_row.get("Kredit Bonusu", 0))
-    payment_per_period = float(target_row.get("To'lov Summasi", 0))
+    current_bonus = safe_float(target_row.get("Kredit Bonusu", 0))
+    payment_per_period = safe_float(target_row.get("To'lov Summasi", 0))
     if amount >= payment_per_period:
         bonus_earned = round(payment_per_period * 0.02)
     else:
@@ -331,8 +340,8 @@ def get_statistics() -> dict:
     closed = [r for r in records if r.get("Holat") == "Yopildi"]
     return {
         "total_sales": len(records), "active": len(active), "closed": len(closed),
-        "total_debt": sum(float(r.get("Qoldiq", 0)) for r in active),
-        "total_revenue": sum(float(r.get("Jami Summa", 0)) for r in records if r.get("Jami Summa")),
+        "total_debt": sum(safe_float(r.get("Qoldiq", 0)) for r in active),
+        "total_revenue": sum(safe_float(r.get("Jami Summa", 0)) for r in records),
         "overdue_count": len(get_overdue_payments(1)), "blacklist_count": len(get_overdue_payments(3))
     }
 
