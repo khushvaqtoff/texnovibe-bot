@@ -132,16 +132,10 @@ async def order_workplace(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price = format_money(selected.get("Narx", 0))
 
     text = (
-        "Buyurtma tasdiqlash:
-
-"
-        f"Tovar: {name}
-"
-        f"Narx: {price} som
-"
-        f"Ish joyi: {work_place or 'Korsatilmagan'}
-
-"
+        "Buyurtma tasdiqlash:"
+        f"Tovar: {name}"
+        f"Narx: {price} som"
+        f"Ish joyi: {work_place or 'Korsatilmagan'}"
         f"Tasdiqlaysizmi?"
     )
     keyboard = [
