@@ -113,7 +113,7 @@ def ensure_worksheets(sh):
 
 
 def generate_sale_id(ws_sales):
-    records = ws_sales.get_all_records()
+    records = ws_sales.get_all_values()
     if len(records) <= 1:
         return "TXN-001"
     last_row = records[-1]
@@ -211,7 +211,7 @@ def record_payment(phone: str, amount: float) -> dict:
     sheets = ensure_worksheets(sh)
     ws_sales = sheets["Savdolar"]
     ws_payments = sheets["Tolovlar"]
-    all_values = ws_sales.get_all_records()
+    all_values = ws_sales.get_all_values()
     target_row = None
     row_index = None
     phone_clean = normalize_phone(phone)
@@ -286,7 +286,7 @@ def update_rating(ws, row_index, today, record):
 
 
 def update_client_db(ws_clients, sale_data):
-    all_values = ws_clients.get_all_records()
+    all_values = ws_clients.get_all_values()
     phone = normalize_phone(sale_data["phone"])
     today_str = date.today().strftime("%d.%m.%Y")
 
@@ -332,7 +332,7 @@ def check_duplicate(phone: str) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     ws = sheets["Savdolar"]
-    all_values = ws.get_all_records()
+    all_values = ws.get_all_values()
     if len(all_values) < 2:
         return {"exists": False}
     headers = all_values[0]
@@ -348,7 +348,7 @@ def check_duplicate(phone: str) -> dict:
     for row in all_values[1:]:
         if len(row) <= max(tel_idx, holat_idx, fio_idx, tovar_idx, qoldiq_idx):
             continue
-        row_phone = str(row[tel_idx]).replace(" ", "").replace("-", "").replace("+", "")
+        row_phone = normalize_phone(row[tel_idx])
         if row_phone == phone_clean and row[holat_idx] == "Faol":
             return {
                 "exists": True,
