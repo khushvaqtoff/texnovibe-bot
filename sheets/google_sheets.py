@@ -43,14 +43,10 @@ CLIENT_HEADERS = [
 
 
 def get_sheets_client():
-    """OAuth2 orqali Google Sheets clientini qaytaradi"""
     creds = None
-
-    # 1. Environment variable dan token o'qish (Railway uchun)
     token_b64 = os.getenv("TOKEN_PICKLE_BASE64")
     if token_b64:
         try:
-            # BEGIN/END CERTIFICATE qatorlarini tozalash
             clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "")
             clean = clean.replace("-----END CERTIFICATE-----", "")
             clean = clean.replace("\r\n", "").replace("\n", "").replace(" ", "")
@@ -59,16 +55,13 @@ def get_sheets_client():
         except Exception as e:
             print(f"Token o'qishda xato: {e}")
 
-    # 2. Lokal token.pickle dan o'qish
     if creds is None and os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "rb") as f:
             creds = pickle.load(f)
 
-    # 3. Token yangilash yoki yangi login
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            # Yangilangan tokenni saqlash
             with open(TOKEN_FILE, "wb") as f:
                 pickle.dump(creds, f)
         elif os.path.exists(CREDENTIALS_FILE):
@@ -137,7 +130,6 @@ def add_sale(sale_data: dict) -> dict:
     if sale_data["payment_type"] == "Haftalik":
         pay_day = int(sale_data.get("pay_day", 0) or 0)
         if pay_day > 0:
-            # Keyingi to'lov kuniga (haftaning kuni 1=Dushanba) o'tamiz
             days_ahead = pay_day - today.isoweekday()
             if days_ahead <= 0:
                 days_ahead += 7
@@ -164,31 +156,37 @@ def add_sale(sale_data: dict) -> dict:
         sale_data.get("birthday", ""), "", 0,
         sale_data.get("work_place", ""),
         sale_data.get("pay_day", ""),
-        float(sale_data.get("down_payment", 0))  # Tolangan summa (avansdan boshlanadi)
+        float(sale_data.get("down_payment", 0))
     ]
     ws_sales.append_row(row)
     update_client_db(ws_clients, sale_data)
     schedule = generate_payment_schedule(remaining, payment_per_period, sale_data["payment_type"], period, next_payment)
-    return {"sale_id": sale_id, "remaining": remaining, "payment_per_period": payment_per_period,
-            "next_payment": next_payment.strftime("%d.%m.%Y"), "schedule": schedule}
+    return {
+        "sale_id": sale_id, "remaining": remaining,
+        "payment_per_period": payment_per_period,
+        "next_payment": next_payment.strftime("%d.%m.%Y"),
+        "schedule": schedule
+    }
 
 
 def generate_payment_schedule(remaining, per_payment, pay_type, periods, start_date):
-    """start_date = birinchi to'lov sanasi"""
     schedule = []
     current_date = start_date
     current_remaining = remaining
     for i in range(1, periods + 1):
         payment = min(per_payment, current_remaining)
         current_remaining -= payment
-        schedule.append({"num": i, "date": current_date.strftime("%d.%m.%Y"), "amount": payment, "remaining": max(0, current_remaining)})
+        schedule.append({
+            "num": i,
+            "date": current_date.strftime("%d.%m.%Y"),
+            "amount": payment,
+            "remaining": max(0, current_remaining)
+        })
         current_date = current_date + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
     return schedule
 
 
-
 def ws_to_records(ws):
-    """get_all_records() muqobili — sarlavha muammosisiz"""
     values = ws.get_all_values()
     if len(values) < 2:
         return []
@@ -201,8 +199,8 @@ def ws_to_records(ws):
         result.append(rec)
     return result
 
+
 def safe_float(val, default=0):
-    """Xavfsiz float konversiya"""
     try:
         v = str(val).replace(" ", "").replace(",", "").strip()
         return float(v) if v else default
@@ -211,26 +209,26 @@ def safe_float(val, default=0):
 
 
 def normalize_phone(phone: str) -> str:
-    """Telefon raqamini standart formatga keltiradi: faqat raqamlar, 998XXXXXXXXX"""
     p = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
-    # 998 bilan boshlanmasa, qo'shamiz
     if p.startswith("998") and len(p) == 12:
         return p
-    if len(p) == 9:  # 901234567
+    if len(p) == 9:
         return "998" + p
     return p
 
 
-def record_payment(phone: str, amount: float) -> dict:
+# ─────────────────────────────────────────────────────────────
+# record_payment — row_index parametri YANGI qo'shildi
+# Agar row_index berilsa, o'sha qatorni yangilaydi (tovar aniq).
+# Berilmasa, eskicha telefon bo'yicha birinchi faol savdoni topadi.
+# ─────────────────────────────────────────────────────────────
+def record_payment(phone: str, amount: float, row_index: int = None) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    ws_sales = sheets["Savdolar"]
+    ws_sales    = sheets["Savdolar"]
     ws_payments = sheets["Tolovlar"]
-    all_values = ws_sales.get_all_values()
-    target_row = None
-    row_index = None
-    phone_clean = normalize_phone(phone)
 
+    all_values  = ws_sales.get_all_values()
     if len(all_values) < 2:
         return {"success": False, "error": "Baza bo'sh"}
 
@@ -242,59 +240,97 @@ def record_payment(phone: str, amount: float) -> dict:
         except ValueError:
             return -1
 
-    for i, row in enumerate(all_values[1:], start=2):
-        def get(name, default=""):
-            idx = col(name)
-            if idx < 0 or idx >= len(row):
-                return default
-            return row[idx] if row[idx] != "" else default
+    phone_clean = normalize_phone(phone)
+    target_row  = None
 
-        if normalize_phone(get("Telefon")) == phone_clean:
-            if get("Holat") == "Faol":
+    # ── row_index berilgan — to'g'ridan o'sha qatorni ol ──
+    if row_index is not None:
+        row = all_values[row_index - 1]   # all_values 0-indexed, row_index 1-indexed
+        target_row = {h: (row[j] if j < len(row) else "") for j, h in enumerate(headers)}
+
+        # Xavfsizlik tekshiruvi
+        if normalize_phone(target_row.get("Telefon", "")) != phone_clean:
+            return {"success": False, "error": "Telefon va qator mos kelmadi"}
+        if target_row.get("Holat") != "Faol":
+            return {"success": False, "error": "Bu savdo faol emas"}
+
+    # ── row_index yo'q — eskicha birinchi faol savdoni top ──
+    else:
+        for i, row in enumerate(all_values[1:], start=2):
+            def get(name, default=""):
+                idx = col(name)
+                if idx < 0 or idx >= len(row):
+                    return default
+                return row[idx] if row[idx] != "" else default
+
+            if normalize_phone(get("Telefon")) == phone_clean and get("Holat") == "Faol":
                 target_row = {h: (row[j] if j < len(row) else "") for j, h in enumerate(headers)}
-                row_index = i
+                row_index  = i
                 break
+
     if not target_row:
-        return {"success": False, "error": "Mijoz topilmadi yoki qarzi yoq"}
+        return {"success": False, "error": "Mijoz topilmadi yoki qarzi yo'q"}
+
+    # ── Hisob-kitob ──────────────────────────────────────────
     old_remaining = safe_float(target_row.get("Qoldiq", 0))
     new_remaining = max(0, old_remaining - amount)
-    today = date.today()
-    pay_type = target_row.get("To'lov Turi", "Oylik")
-    next_date = today + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
-    ws_sales.update_cell(row_index, 8, new_remaining)
-    ws_sales.update_cell(row_index, 12, next_date.strftime("%d.%m.%Y"))
-    # Tolangan summani yangilash (21-ustun)
+    today         = date.today()
+    pay_type      = target_row.get("To'lov Turi", "Oylik")
+    next_date     = today + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
+
+    # Sheets yangilash
+    ws_sales.update_cell(row_index, col("Qoldiq") + 1,                  new_remaining)
+    ws_sales.update_cell(row_index, col("Keyingi To'lov Sanasi") + 1,   next_date.strftime("%d.%m.%Y"))
+
     old_paid = safe_float(target_row.get("To'langan Summa", 0))
     new_paid = old_paid + amount
-    ws_sales.update_cell(row_index, 21, new_paid)
+    ws_sales.update_cell(row_index, col("To'langan Summa") + 1, new_paid)
+
     if new_remaining == 0:
-        ws_sales.update_cell(row_index, 14, "Yopildi")
-        ws_sales.update_cell(row_index, 15, "🟢 Alo")
-    # Bonus hisoblash:
-    # - Oylik to'lovni to'liq to'lasa: oylik summaning 2%
-    # - Oylikdan kam to'lasa: to'langan summaning 2%
-    current_bonus = safe_float(target_row.get("Kredit Bonusu", 0))
+        ws_sales.update_cell(row_index, col("Holat") + 1,   "Yopildi")
+        ws_sales.update_cell(row_index, col("Reyting") + 1, "🟢 Alo")
+
+    # Bonus
+    current_bonus      = safe_float(target_row.get("Kredit Bonusu", 0))
     payment_per_period = safe_float(target_row.get("To'lov Summasi", 0))
-    if amount >= payment_per_period:
-        bonus_earned = round(payment_per_period * 0.02)
-    else:
-        bonus_earned = round(amount * 0.02)
-    new_bonus = current_bonus + bonus_earned
-    ws_sales.update_cell(row_index, 18, new_bonus)
+    bonus_earned       = round((payment_per_period if amount >= payment_per_period else amount) * 0.02)
+    new_bonus          = current_bonus + bonus_earned
+    ws_sales.update_cell(row_index, col("Kredit Bonusu") + 1, new_bonus)
+
+    # To'lovlar varag'iga yozish
     payment_records = ws_payments.get_all_values()
-    pay_id = f"PAY-{max(0, len(payment_records)-1):04d}"
-    ws_payments.append_row([pay_id, target_row.get("ID"), target_row.get("FIO"), phone, amount, today.strftime("%d.%m.%Y"), new_remaining])
+    pay_id = f"PAY-{max(0, len(payment_records) - 1):04d}"
+    ws_payments.append_row([
+        pay_id,
+        target_row.get("ID"),
+        target_row.get("FIO"),
+        phone,
+        amount,
+        today.strftime("%d.%m.%Y"),
+        new_remaining
+    ])
+
     update_rating(ws_sales, row_index, today, target_row)
-    return {"success": True, "fio": target_row.get("FIO"), "tovar": target_row.get("Tovar", ""), "paid": amount, "old_remaining": old_remaining,
-            "new_remaining": new_remaining, "next_payment": next_date.strftime("%d.%m.%Y"),
-            "is_closed": new_remaining == 0, "bonus": new_bonus, "chat_id": target_row.get("Chat ID", "")}
+
+    return {
+        "success":       True,
+        "fio":           target_row.get("FIO"),
+        "tovar":         target_row.get("Tovar", ""),
+        "paid":          amount,
+        "old_remaining": old_remaining,
+        "new_remaining": new_remaining,
+        "next_payment":  next_date.strftime("%d.%m.%Y"),
+        "is_closed":     new_remaining == 0,
+        "bonus":         new_bonus,
+        "chat_id":       target_row.get("Chat ID", "")
+    }
 
 
 def update_rating(ws, row_index, today, record):
     try:
-        next_pay = datetime.strptime(record.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y").date()
+        next_pay  = datetime.strptime(record.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y").date()
         days_diff = (today - next_pay).days
-        rating = "🟢 Alo" if days_diff <= 0 else ("🟡 Ortacha" if days_diff <= 2 else "🔴 Xavfli")
+        rating    = "🟢 Alo" if days_diff <= 0 else ("🟡 Ortacha" if days_diff <= 2 else "🔴 Xavfli")
         ws.update_cell(row_index, 15, rating)
     except:
         pass
@@ -302,20 +338,19 @@ def update_rating(ws, row_index, today, record):
 
 def update_client_db(ws_clients, sale_data):
     all_values = ws_clients.get_all_values()
-    phone = normalize_phone(sale_data["phone"])
-    today_str = date.today().strftime("%d.%m.%Y")
+    phone      = normalize_phone(sale_data["phone"])
+    today_str  = date.today().strftime("%d.%m.%Y")
 
     if len(all_values) > 1:
         headers = all_values[0]
         try:
             tel_idx = headers.index("Telefon")
         except ValueError:
-            tel_idx = 1  # 2-ustun default
+            tel_idx = 1
 
         for i, row in enumerate(all_values[1:], start=2):
             if len(row) > tel_idx:
-                row_phone = normalize_phone(row[tel_idx])
-                if row_phone == phone:
+                if normalize_phone(row[tel_idx]) == phone:
                     try:
                         jami_idx = headers.index("Jami Savdolar")
                         total = safe_float(row[jami_idx]) + 1
@@ -327,19 +362,10 @@ def update_client_db(ws_clients, sale_data):
                     return
 
     ws_clients.append_row([
-        sale_data["fio"],
-        sale_data["phone"],
-        "",   # Chat ID
-        "",   # Username
-        1,    # Jami savdolar
-        0,    # Muvaffaqiyatli yopilgan
-        0,    # Kredit bali
-        "Bronze",
-        sale_data.get("birthday", ""),
-        today_str,
-        sale_data.get("work_place", ""),
-        today_str,
-        "Yoq"  # Eslatma oladi
+        sale_data["fio"], sale_data["phone"], "", "",
+        1, 0, 0, "Bronze",
+        sale_data.get("birthday", ""), today_str,
+        sale_data.get("work_place", ""), today_str, "Yoq"
     ])
 
 
@@ -347,28 +373,27 @@ def check_duplicate(phone: str) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     ws = sheets["Savdolar"]
-    all_values = ws.get_all_values()
+    all_values  = ws.get_all_values()
     if len(all_values) < 2:
         return {"exists": False}
-    headers = all_values[0]
+    headers     = all_values[0]
     phone_clean = normalize_phone(phone)
     try:
-        tel_idx = headers.index("Telefon")
+        tel_idx   = headers.index("Telefon")
         holat_idx = headers.index("Holat")
-        fio_idx = headers.index("FIO")
+        fio_idx   = headers.index("FIO")
         tovar_idx = headers.index("Tovar")
-        qoldiq_idx = headers.index("Qoldiq")
+        qoldiq_idx= headers.index("Qoldiq")
     except ValueError:
         return {"exists": False}
     for row in all_values[1:]:
         if len(row) <= max(tel_idx, holat_idx, fio_idx, tovar_idx, qoldiq_idx):
             continue
-        row_phone = normalize_phone(row[tel_idx])
-        if row_phone == phone_clean and row[holat_idx] == "Faol":
+        if normalize_phone(row[tel_idx]) == phone_clean and row[holat_idx] == "Faol":
             return {
-                "exists": True,
-                "fio": row[fio_idx],
-                "product": row[tovar_idx],
+                "exists":    True,
+                "fio":       row[fio_idx],
+                "product":   row[tovar_idx],
                 "remaining": row[qoldiq_idx]
             }
     return {"exists": False}
@@ -378,19 +403,22 @@ def get_today_payments() -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     today_str = date.today().strftime("%d.%m.%Y")
-    return [r for r in ws_to_records(sheets["Savdolar"]) if r.get("Holat") == "Faol" and r.get("Keyingi To'lov Sanasi") == today_str]
+    return [
+        r for r in ws_to_records(sheets["Savdolar"])
+        if r.get("Holat") == "Faol" and r.get("Keyingi To'lov Sanasi") == today_str
+    ]
 
 
 def get_overdue_payments(days: int = 3) -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    today = date.today()
+    today  = date.today()
     result = []
     for rec in ws_to_records(sheets["Savdolar"]):
         if rec.get("Holat") != "Faol":
             continue
         try:
-            next_pay = datetime.strptime(rec.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y").date()
+            next_pay     = datetime.strptime(rec.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y").date()
             overdue_days = (today - next_pay).days
             if overdue_days >= days:
                 rec["Kechikish Kunlari"] = overdue_days
@@ -404,7 +432,10 @@ def get_payment_history(phone: str) -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     phone_clean = str(phone).replace(" ", "")
-    return [r for r in ws_to_records(sheets["Tolovlar"]) if str(r.get("Telefon", "")).replace(" ", "") == phone_clean]
+    return [
+        r for r in ws_to_records(sheets["Tolovlar"])
+        if str(r.get("Telefon", "")).replace(" ", "") == phone_clean
+    ]
 
 
 def get_all_clients_with_status() -> list:
@@ -418,13 +449,16 @@ def get_statistics() -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     records = ws_to_records(sheets["Savdolar"])
-    active = [r for r in records if r.get("Holat") == "Faol"]
-    closed = [r for r in records if r.get("Holat") == "Yopildi"]
+    active  = [r for r in records if r.get("Holat") == "Faol"]
+    closed  = [r for r in records if r.get("Holat") == "Yopildi"]
     return {
-        "total_sales": len(records), "active": len(active), "closed": len(closed),
-        "total_debt": sum(safe_float(r.get("Qoldiq", 0)) for r in active),
-        "total_revenue": sum(safe_float(r.get("Jami Summa", 0)) for r in records),
-        "overdue_count": len(get_overdue_payments(1)), "blacklist_count": len(get_overdue_payments(3))
+        "total_sales":    len(records),
+        "active":         len(active),
+        "closed":         len(closed),
+        "total_debt":     sum(safe_float(r.get("Qoldiq", 0)) for r in active),
+        "total_revenue":  sum(safe_float(r.get("Jami Summa", 0)) for r in records),
+        "overdue_count":  len(get_overdue_payments(1)),
+        "blacklist_count":len(get_overdue_payments(3))
     }
 
 
@@ -433,17 +467,16 @@ def save_client_chat_id(phone: str, chat_id: int, username: str = ""):
     sheets = ensure_worksheets(sh)
     ws = sheets["Mijozlar"]
     phone_clean = str(phone).replace(" ", "")
-    today_str = date.today().strftime("%d.%m.%Y")
+    today_str   = date.today().strftime("%d.%m.%Y")
 
     for i, rec in enumerate(ws_to_records(ws), start=2):
         if str(rec.get("Telefon", "")).replace(" ", "") == phone_clean:
-            ws.update_cell(i, 3, chat_id)
-            ws.update_cell(i, 4, username)
+            ws.update_cell(i, 3,  chat_id)
+            ws.update_cell(i, 4,  username)
             ws.update_cell(i, 12, today_str)
-            ws.update_cell(i, 13, "Ha")  # Eslatma oladi
+            ws.update_cell(i, 13, "Ha")
             return True
 
-    # Agar bazada yoq bolsa - yangi qator
     ws.append_row([
         "", phone, chat_id, username,
         0, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
@@ -454,26 +487,24 @@ def save_client_chat_id(phone: str, chat_id: int, username: str = ""):
 def get_todays_birthdays() -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    today = date.today()
+    today    = date.today()
     today_md = f"{today.day:02d}.{today.month:02d}"
-    return [r for r in ws_to_records(sheets["Savdolar"]) if str(r.get("Tug'ilgan Kun", ""))[:5] == today_md]
+    return [
+        r for r in ws_to_records(sheets["Savdolar"])
+        if str(r.get("Tug'ilgan Kun", ""))[:5] == today_md
+    ]
 
 
 def get_client_chat_id(phone: str) -> str:
-    """Telefon raqami orqali mijozning Chat ID sini topadi"""
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-
-    # Telefon raqamini tozalash — faqat raqamlar
     phone_digits = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
-    # Avval Mijozlar listidan qidirish
     for rec in ws_to_records(sheets["Mijozlar"]):
         rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "").strip()
         if rec_phone == phone_digits and str(rec.get("Chat ID", "")).strip():
             return str(rec.get("Chat ID", "")).strip()
 
-    # Topilmasa Savdolar listidan qidirish (Chat ID ustuni bor bolsa)
     for rec in ws_to_records(sheets["Savdolar"]):
         rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "").strip()
         if rec_phone == phone_digits:
@@ -482,3 +513,16 @@ def get_client_chat_id(phone: str) -> str:
                 return chat_id
 
     return ""
+
+
+# katalog uchun — catalog_handler.py ishlatadi
+def get_sheet(sheet_name: str):
+    sh = get_spreadsheet()
+    try:
+        return sh.worksheet(sheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title=sheet_name, rows=500, cols=10)
+        if sheet_name == "Katalog":
+            ws.append_row(["Nom", "Narx", "Tavsif", "PhotoID", "Sana"])
+            ws.format("A1:E1", {"textFormat": {"bold": True}})
+        return ws

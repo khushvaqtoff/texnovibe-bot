@@ -22,10 +22,9 @@ from handlers.payment_handler import (
     start_payment, payment_phone, payment_amount, payment_confirm,
     PAY_PHONE, PAY_AMOUNT, PAY_CONFIRM
 )
-from handlers.query_handler import (
-    cmd_history, cmd_search, cmd_debtors, cmd_blacklist,
-    cmd_rating, cmd_clients, cmd_today, cmd_stats,
-    start_search, search_query, SEARCH_QUERY
+from handlers.payment_handler import (
+start_payment, payment_phone, payment_select, payment_amount, payment_confirm,
+PAY_PHONE, PAY_SELECT, PAY_AMOUNT, PAY_CONFIRM
 )
 from handlers.auction_handler import (
     start_auction, auction_bid, auction_end_cmd,
@@ -34,8 +33,8 @@ from handlers.auction_handler import (
 from handlers.admin_handler import cmd_export, cmd_backup, cmd_clients_db
 from handlers.report_handler import cmd_daily_report, cmd_warehouse, cmd_excel_export
 from handlers.cancel_sale_handler import (
-    start_cancel, cancel_search, cancel_confirm, cancel_cmd,
-    CANCEL_SEARCH, CANCEL_CONFIRM
+    start_cancel, cancel_search, cancel_select, cancel_confirm, cancel_cmd,
+    CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM
 )
 from handlers.client_panel import (
     cmd_mening_malumotlarim, cmd_register,
@@ -225,6 +224,9 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone),
             ],
+	    PAY_SELECT: [
+       	    CallbackQueryHandler(payment_select, pattern="^paysel_"),
+            ],
             PAY_AMOUNT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -256,6 +258,9 @@ def main():
                 MessageHandler(home_filter, cancel_cmd),
                 MessageHandler(bekor_filter, cancel_cmd),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search),
+            ],
+	    CANCEL_SELECT: [
+                CallbackQueryHandler(cancel_select, pattern="^cnlsel_"),
             ],
             CANCEL_CONFIRM: [
                 MessageHandler(home_filter, cancel_cmd),
