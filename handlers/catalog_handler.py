@@ -1,228 +1,238 @@
 """
 TexnoVibe — handlers/catalog_handler.py
-Katalog sahifasi va Tovar qo'shish mantiqlari birlashtirilgan xavfsiz talqin.
+Yangilik: Tovar qo'shishda rasm yuklash qo'shildi (CAT_PHOTO state)
+Tuzatish: Bot import qila oladigan barcha funksiya nomlari tartibga solindi.
 """
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from sheets.google_sheets import get_spreadsheet, ensure_worksheets
-import html
-import os
 
-# Konversiya holatlari
-CATALOG_MAIN, CATALOG_VIEW = range(40, 42)
-ADD_PROD_NAME, ADD_PROD_PRICE, ADD_PROD_CONFIRM = range(45, 48)
+from sheets.catalog_sheets import (
+    add_product_to_sheet,
+    get_all_products,
+    remove_product_from_sheet,
+)
 
+logger = logging.getLogger(__name__)
 
-def format_money(amount) -> str:
-    try:
-        return f"{int(float(amount)):,}".replace(",", " ")
-    except (ValueError, TypeError):
-        return str(amount)
-
-
-def escape_html(text) -> str:
-    return html.escape(str(text)) if text else ""
+# === CONVERSATION STATES ===
+CAT_NAME    = 0
+CAT_PRICE   = 1
+CAT_DESC    = 2
+CAT_PHOTO   = 3   # rasm yuklash bosqichi
+CAT_CONFIRM = 4
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 1. KATALOGNI KO'RISH BO'LIMI
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-async def start_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Katalog bo'limini boshlash"""
-    status_msg = await update.message.reply_text("⏳ Tovar katalogi yuklanmoqda...")
-    
-    try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws = sheets["Tovarlar"]
-        records = ws.get_all_records()
-        
-        if not records:
-            await status_msg.edit_text("📭 Hozircha katalogda tovarlar mavjud emas.")
-            return ConversationHandler.END
-            
-        context.user_data["catalog_items"] = records
-        context.user_data["catalog_page"] = 0
-        
-        await status_msg.delete()
-        await send_catalog_page(update.message, context)
-        return CATALOG_MAIN
-        
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Katalog yuklashda xatolik: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
-        return ConversationHandler.END
-
-
-async def send_catalog_page(message, context: ContextTypes.DEFAULT_TYPE, edit=False):
-    """Katalogni inline sahifalab ko'rsatish"""
-    items = context.user_data.get("catalog_items", [])
-    page = context.user_data.get("catalog_page", 0)
-    per_page = 5
-    
-    start_idx = page * per_page
-    end_idx = start_idx + per_page
-    page_items = items[start_idx:end_idx]
-    
-    total_pages = (len(items) + per_page - 1) // per_page
-    
-    text = f"🛍 <b>TexnoVibe — Tovar Katalogi</b> (Sahifa {page + 1}/{total_pages})\n"
-    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
-    
-    keyboard = []
-    for item in page_items:
-        tovar_nomi = item.get("Tovar Nomi", "Noma'lum tovar")
-        narxi = format_money(item.get("Narxi", 0))
-        text += f"▪️ <b>{escape_html(tovar_nomi)}</b> — {narxi} so'm\n"
-        
-        tovar_id = item.get("ID", tovar_nomi)
-        keyboard.append([InlineKeyboardButton(f"🔎 {tovar_nomi}", callback_data=f"catview_{tovar_id}")])
-        
-    text += "\n━━━━━━━━━━━━━━━━━━━━"
-    
-    nav_buttons = []
-    if page > 0:
-        nav_buttons.append(InlineKeyboardButton("⬅️ Orqaga", callback_data="catprev"))
-    if end_idx < len(items):
-        nav_buttons.append(InlineKeyboardButton("Oldinga ➡️", callback_data="catnext"))
-        
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-        
-    keyboard.append([InlineKeyboardButton("❌ Katalogni yopish", callback_data="catclose")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if edit:
-        await message.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
-    else:
-        await message.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
-
-
-async def catalog_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sahifalash tugmalari bosilganda"""
-    query = update.callback_query
-    await query.answer()
-    
-    page = context.user_data.get("catalog_page", 0)
-    
-    if query.data == "catnext":
-        context.user_data["catalog_page"] = page + 1
-        await send_catalog_page(query.message, context, edit=True)
-        return CATALOG_MAIN
-        
-    elif query.data == "catprev":
-        context.user_data["catalog_page"] = page - 1
-        await send_catalog_page(query.message, context, edit=True)
-        return CATALOG_MAIN
-        
-    elif query.data == "catclose":
-        await query.edit_message_text("🏠 Katalog yopildi.")
-        context.user_data.clear()
-        return ConversationHandler.END
-        
-    return CATALOG_MAIN
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 2. YANGI TOVAR QO'SHISH BO'LIMI (Import xatosini tuzatish)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+# ─────────────────────────────────────────────
+# TOVAR QO'SHISH — boshlash
+# ─────────────────────────────────────────────
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Yangi tovar qo'shish jarayonini boshlash"""
     context.user_data.clear()
     await update.message.reply_text(
-        "➕ <b>Yangi tovar qo'shish</b>\n\n"
-        "Tovar nomini kiriting:",
-        parse_mode="HTML"
+        "📦 *Yangi tovar qo'shish*\n\n"
+        "1️⃣ Tovar nomini yozing:",
+        parse_mode="Markdown",
     )
-    return ADD_PROD_NAME
+    return CAT_NAME
 
 
-async def add_product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tovar nomini qabul qilish"""
-    name = update.message.text.strip()
-    context.user_data["new_prod_name"] = name
-    
+# ─────────────────────────────────────────────
+# 1. Nom
+# ─────────────────────────────────────────────
+async def cat_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cat_name"] = update.message.text.strip()
     await update.message.reply_text(
-        f"🛍 Tovar nomi: <b>{escape_html(name)}</b>\n\n"
-        "Endi ushbu tovarni narxini kiriting (faqat raqamlarda, masalan: 2500000):",
-        parse_mode="HTML"
+        "2️⃣ Narxini yozing (so'mda):\nMasalan: `3500000`",
+        parse_mode="Markdown",
     )
-    return ADD_PROD_PRICE
+    return CAT_PRICE
 
 
-async def add_product_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tovar narxini qabul qilish va tasdiqlash so'rash"""
-    price_text = update.message.text.strip().replace(" ", "").replace(",", "")
-    
-    if not price_text.isdigit():
-        await update.message.reply_text("❌ Iltimos narxni faqat raqamlarda kiriting:")
-        return ADD_PROD_PRICE
-        
-    context.user_data["new_prod_price"] = int(price_text)
-    name = context.user_data.get("new_prod_name")
-    formatted_price = format_money(price_text)
-    
-    keyboard = [[
-        InlineKeyboardButton("✅ Saqlash", callback_data="save_prod"),
-        InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_prod")
-    ]]
-    
+# ─────────────────────────────────────────────
+# 2. Narx
+# ─────────────────────────────────────────────
+async def cat_get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip().replace(" ", "").replace(",", "")
+    if not text.isdigit():
+        await update.message.reply_text("❌ Faqat raqam kiriting! Masalan: `3500000`", parse_mode="Markdown")
+        return CAT_PRICE
+
+    context.user_data["cat_price"] = int(text)
     await update.message.reply_text(
-        "📝 <b>Ma'lumotlarni tasdiqlang:</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"📦 Tovar: <b>{escape_html(name)}</b>\n"
-        f"💵 Narxi: <b>{formatted_price} so'm</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Google Sheets'ga saqlashni tasdiqlaysizmi?",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "3️⃣ Qisqacha tavsif yozing:\nMasalan: `Samsung 55\" 4K OLED TV`",
+        parse_mode="Markdown",
     )
-    return ADD_PROD_CONFIRM
+    return CAT_DESC
 
 
-async def add_product_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tasdiqlangandan so'ng Google Sheets'ga yozish"""
+# ─────────────────────────────────────────────
+# 3. Tavsif
+# ─────────────────────────────────────────────
+async def cat_get_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cat_desc"] = update.message.text.strip()
+
+    keyboard = [[InlineKeyboardButton("⏭ O'tkazib yuborish", callback_data="cat_skip_photo")]]
+    await update.message.reply_text(
+        "4️⃣ Tovar rasmini yuboring 📸\n\n"
+        "_(Rasm bo'lmasa pastdagi tugmani bosing)_",
+        "Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return CAT_PHOTO
+
+
+# ─────────────────────────────────────────────
+# 4. Rasm
+# ─────────────────────────────────────────────
+async def cat_get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Foydalanuvchi rasm yuborsa saqlaydi"""
+    if update.message and update.message.photo:
+        # Eng yuqori sifatli rasmni olish
+        photo = update.message.photo[-1]
+        context.user_data["cat_photo_id"] = photo.file_id
+        await update.message.reply_text("✅ Rasm qabul qilindi!")
+    else:
+        context.user_data["cat_photo_id"] = None
+
+    return await _show_confirm(update, context)
+
+
+async def cat_skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """'O'tkazib yuborish' tugmasi bosilsa"""
     query = update.callback_query
     await query.answer()
-    
-    if query.data == "cancel_prod":
-        await query.edit_message_text("❌ Tovar qo'shish bekor qilindi.")
-        context.user_data.clear()
-        return ConversationHandler.END
-        
-    await query.edit_message_text("⏳ Ma'lumot jadvalga yozilmoqda...")
-    
-    try:
-        name = context.user_data.get("new_prod_name")
-        price = context.user_data.get("new_prod_price")
-        
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws = sheets["Tovarlar"]
-        
-        # Dinamik ID yaratish (qatorlar soniga qarab)
-        existing_rows = len(ws.get_all_values())
-        new_id = f"PRD-{str(existing_rows).zfill(3)}"
-        
-        # Google jadvalga yangi qator qo'shish [ID, Tovar Nomi, Narxi]
-        ws.append_row([new_id, name, price])
-        
-        await query.edit_message_text(
-            "✅ <b>TOVAR MUVAFFAQIYATLI QO'SHILDI</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"🆔 ID: <code>{new_id}</code>\n"
-            f"📦 Tovar: <b>{escape_html(name)}</b>\n"
-            f"💵 Narxi: <b>{format_money(price)} so'm</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 Google Sheets muvaffaqiyatli yangilandi! 💾",
-            parse_mode="HTML"
+    context.user_data["cat_photo_id"] = None
+    await query.edit_message_text("⏭ Rasm o'tkazib yuborildi.")
+    return await _show_confirm(update, context, via_query=True)
+
+
+async def _show_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, via_query=False):
+    """Tasdiqlash xabarini ko'rsatish"""
+    d = context.user_data
+    narx_formatlangan = f"{d['cat_price']:,}".replace(",", " ")
+    photo_info = "✅ Rasm bor" if d.get("cat_photo_id") else "🚫 Rasmsiz"
+
+    text = (
+        "📋 *Tovar ma'lumotlari:*\n\n"
+        f"📦 Nom: `{d['cat_name']}`\n"
+        f"💰 Narx: `{narx_formatlangan} so'm`\n"
+        f"📝 Tavsif: `{d['cat_desc']}`\n"
+        f"🖼 Rasm: {photo_info}\n\n"
+        "Tasdiqlaysizmi?"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Ha, saqlash", callback_data="cat_confirm_yes"),
+            InlineKeyboardButton("❌ Bekor qilish", callback_data="cat_confirm_no"),
+        ]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+
+    if via_query:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=text,
+            parse_mode="Markdown",
+            reply_markup=markup,
         )
-        
+    else:
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
+
+    return CAT_CONFIRM
+
+
+# ─────────────────────────────────────────────
+# 5. Tasdiqlash
+# ─────────────────────────────────────────────
+async def cat_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "cat_confirm_no":
+        await query.edit_message_text("❌ Tovar qo'shish bekor qilindi.")
+        return ConversationHandler.END
+
+    d = context.user_data
+    try:
+        add_product_to_sheet(
+            name=d["cat_name"],
+            price=d["cat_price"],
+            desc=d["cat_desc"],
+            photo_id=d.get("cat_photo_id"),
+        )
     except Exception as e:
-        await query.edit_message_text(f"❌ Sheets'ga yozishda xatolik: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
-        
+        logger.error(f"Katalog saqlashda xato: {e}")
+        await query.edit_message_text("❌ Xato yuz berdi. Qayta urinib ko'ring.")
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        f"✅ *{d['cat_name']}* katalogga qo'shildi!",
+        parse_mode="Markdown",
+    )
     context.user_data.clear()
     return ConversationHandler.END
+
+
+# ─────────────────────────────────────────────
+# KATALOGNI KO'RISH
+# ─────────────────────────────────────────────
+async def cmd_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Barcha tovarlarni rasmli yoki rasmsiz ko'rsatish"""
+    try:
+        products = get_all_products()
+    except Exception as e:
+        logger.error(f"Katalog olishda xato: {e}")
+        await update.message.reply_text("❌ Katalogni yuklab bo'lmadi.")
+        return
+
+    if not products:
+        await update.message.reply_text("📦 Katalog hozircha bo'm-bo'sh.")
+        return
+
+    await update.message.reply_text(
+        f"🛍 *Katalog — {len(products)} ta tovar*",
+        parse_mode="Markdown",
+    )
+
+    for i, p in enumerate(products, 1):
+        narx = f"{int(p.get('narx', 0)):,}".replace(",", " ")
+        caption = (
+            f"*{i}. {p.get('nom', '—')}*\n"
+            f"💰 Narx: `{narx} so'm`\n"
+            f"📝 {p.get('tavsif', '')}"
+        )
+
+        photo_id = p.get("photo_id")
+        if photo_id:
+            await update.message.reply_photo(
+                photo=photo_id,
+                caption=caption,
+                parse_mode="Markdown",
+            )
+        else:
+            await update.message.reply_text(caption, parse_mode="Markdown")
+
+
+# ─────────────────────────────────────────────
+# TOVAR O'CHIRISH (admin)
+# ─────────────────────────────────────────────
+async def cmd_remove_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "❗ Tovar nomini yozing:\n`/tovarchiqar Samsung TV`",
+            parse_mode="Markdown",
+        )
+        return
+
+    nom = " ".join(context.args)
+    try:
+        result = remove_product_from_sheet(nom)
+        if result:
+            await update.message.reply_text(f"✅ *{nom}* katalogdan o'chirildi.", parse_mode="Markdown")
+        else:
+            await update.message.reply_text(f"❌ *{nom}* topilmadi.", parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"O'chirishda xato: {e}")
+        await update.message.reply_text("❌ Xato yuz berdi.")
