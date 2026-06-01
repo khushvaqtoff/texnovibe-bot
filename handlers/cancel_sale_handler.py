@@ -1,7 +1,7 @@
 """
 TexnoVibe — handlers/cancel_sale_handler.py
 Savdoni bekor qilish paneli.
-Chat ID qidiruv mantiqi maksimal darajada kuchaytirilgan yakuniy variant.
+Xatoliklarni aniq ko'rsatuvchi va Chat ID formatini to'g'rilovchi variant.
 """
 
 import logging
@@ -66,17 +66,12 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         headers = all_rows[0]
         
-        # Ustunlar indekslarini sarlavha matniga qarab dinamik aniqlaymiz
         id_col = find_column_index(headers, ["id", "savdo id", "txn"]) or 1
         name_col = find_column_index(headers, ["mijoz", "ism", "fio", "f.i.o"]) or 2
-        
-        # CHAT ID QIDIRUVINI MAKSIMAL KENGAYTIRDIK (barcha ehtimoliy nomlar)
         chat_col = find_column_index(headers, ["chat", "telegram id", "mijoz id", "tg id", "user id", "chatid", "tg_id"]) or 3
-        
         tovar_col = find_column_index(headers, ["tovar", "mahsulot", "buyum"]) or 5
         status_col = find_column_index(headers, ["holat", "status"]) or 14
 
-        # Indekslarni context'da saqlab turamiz
         context.user_data["cols"] = {
             "id": id_col, "name": name_col, "chat": chat_col, 
             "tovar": tovar_col, "status": status_col
@@ -84,12 +79,10 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         found_sales = []
         for idx, row in enumerate(all_rows[1:], start=2):
-            # 1. Holatni tekshirish
             holat = str(row[status_col - 1]).strip().lower() if len(row) >= status_col else ""
             if "bekor" in holat or holat == "yakunlangan":
                 continue
 
-            # 2. Qidiruv matnini tekshirish
             row_dump = " ".join([str(cell).lower() for cell in row])
             if query_text in row_dump:
                 found_sales.append({
@@ -230,20 +223,23 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mijoz_ismi = sale_info.get("mijoz_ismi", "Mijoz")
         tovar_nomi = sale_info.get("tovar_nomi", "Tovar")
         
-        # AGAR CHAT ID TOPILMAGAN BO'LSA, QATORNING ICHIDAN 6-11 XONALI TELEGRAM ID'LARINI AVTOMATIK SUĞURIB OLISH MANTIQLARI
+        # Chat ID o'qish
         mijoz_chat_id = sale_info.get("chat_id", "")
-        if not mijoz_chat_id or not str(mijoz_chat_id).isdigit():
+        if not mijoz_chat_id:
             chat_col_idx = cols.get("chat") or 3
             if len(row_values) >= chat_col_idx:
                 mijoz_chat_id = row_values[chat_col_idx - 1]
         
-        # Ekstremal holat: Agar hali ham topilmasa, butun qatordagi elementlar ichidan Telegram ID ga o'xshashini qidiramiz
-        if not mijoz_chat_id or not str(mijoz_chat_id).isdigit() or len(str(mijoz_chat_id)) < 6:
-            for cell in row_values:
-                val_str = str(cell).strip()
-                if val_str.isdigit() and 7 <= len(val_str) <= 11 and not val_str.startswith("998"):
-                    mijoz_chat_id = val_str
-                    break
+        # Formatni tozalash (agar nuqtali yoki float formatda yozilib qolgan bo'lsa)
+        clean_chat_id = None
+        if mijoz_chat_id:
+            try:
+                # Agar string oxirida .0 bo'lsa (masalan '1234567.0') olib tashlaymiz
+                raw_str = str(mijoz_chat_id).split('.')[0].strip()
+                if raw_str.isdigit() or (raw_str.startswith('-') and raw_str[1:].isdigit()):
+                    clean_chat_id = int(raw_str)
+            except Exception:
+                pass
 
         id_text = f"<b>ID:</b> {escape_html(savdo_id)}\n" if savdo_id else ""
         await query.edit_message_text(
@@ -257,10 +253,10 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # 3. MIJOZNING SHAXSIY TELEGRAMIGA ESLATMA YUBORISH
-        if mijoz_chat_id and str(mijoz_chat_id).isdigit() and len(str(mijoz_chat_id)) >= 6:
+        if clean_chat_id:
             try:
                 await context.bot.send_message(
-                    chat_id=int(mijoz_chat_id),
+                    chat_id=clean_chat_id,
                     text=(
                         f"⚠️ <b>Hurmatli {escape_html(mijoz_ismi)}!</b>\n\n"
                         f"Sizning 📦 <b>{escape_html(tovar_nomi)}</b> uchun rasmiylashtirilgan "
@@ -270,12 +266,16 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ),
                     parse_mode="HTML"
                 )
-                logger.info(f"Mijozga ({mijoz_chat_id}) bekor qilish eslatmasi yuborildi.")
+                logger.info(f"Mijozga ({clean_chat_id}) bekor qilish eslatmasi yuborildi.")
             except Exception as bot_err:
-                logger.error(f"Mijozga yuborishda xatolik: {bot_err}")
-                await query.message.reply_text("ℹ️ <i>Mijoz botni block qilgan bo'lishi mumkin, eslatma yetib bormadi.</i>", parse_mode="HTML")
+                logger.error(f"Mijozga yuborishda aniq xatolik: {bot_err}")
+                # Real xatolik matnini adminga ko'rsatamiz:
+                await query.message.reply_text(
+                    f"ℹ️ <i>Eslatma ketmadi. Telegram xatolik matni:</i> <code>{escape_html(str(bot_err))}</code>", 
+                    parse_mode="HTML"
+                )
         else:
-            await query.message.reply_text("ℹ️ <i>Jadvalning 'Chat ID' ustunida mijozning Telegram ID raqami topilmadi, eslatma yuborilmadi.</i>", parse_mode="HTML")
+            await query.message.reply_text("ℹ️ <i>Jadvalda o'qilgan Chat ID noto'g'ri formatda yoki bo'sh, eslatma yuborilmadi.</i>", parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Tasdiqlashda xatolik: {e}")
