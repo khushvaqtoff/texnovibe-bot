@@ -133,15 +133,16 @@ def add_sale(sale_data: dict) -> dict:
     remaining = float(sale_data["total_price"]) - float(sale_data.get("down_payment", 0))
     period = int(sale_data["installment_period"])
     payment_per_period = round(remaining / period)
+    import calendar
     if sale_data["payment_type"] == "Haftalik":
         next_payment = today + timedelta(weeks=1)
+        # Haftalik uchun to'lov kuni: haftaning kuni (1=Dushanba)
+        sale_data["pay_day"] = sale_data.get("pay_day", 0) or next_payment.isoweekday()
     else:
         pay_day = int(sale_data.get("pay_day", 0) or 0)
         if pay_day > 0:
-            # Keyingi oyda belgilangan kun
             next_month = today.month + 1 if today.month < 12 else 1
             next_year = today.year if today.month < 12 else today.year + 1
-            import calendar
             max_day = calendar.monthrange(next_year, next_month)[1]
             actual_day = min(pay_day, max_day)
             from datetime import date as date_cls
@@ -186,6 +187,17 @@ def safe_float(val, default=0):
         return default
 
 
+def normalize_phone(phone: str) -> str:
+    """Telefon raqamini standart formatga keltiradi: faqat raqamlar, 998XXXXXXXXX"""
+    p = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
+    # 998 bilan boshlanmasa, qo'shamiz
+    if p.startswith("998") and len(p) == 12:
+        return p
+    if len(p) == 9:  # 901234567
+        return "998" + p
+    return p
+
+
 def record_payment(phone: str, amount: float) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
@@ -194,13 +206,10 @@ def record_payment(phone: str, amount: float) -> dict:
     records = ws_sales.get_all_records(head=1, default_blank="")
     target_row = None
     row_index = None
-    def clean_phone(p):
-        return str(p).replace("+", "").replace(" ", "").replace("-", "").strip()
-
-    phone_clean = clean_phone(phone)
+    phone_clean = normalize_phone(phone)
 
     for i, rec in enumerate(records, start=2):
-        if clean_phone(rec.get("Telefon", "")) == phone_clean:
+        if normalize_phone(rec.get("Telefon", "")) == phone_clean:
             if rec.get("Holat") == "Faol":
                 target_row = rec
                 row_index = i
@@ -253,7 +262,7 @@ def update_rating(ws, row_index, today, record):
 
 def update_client_db(ws_clients, sale_data):
     all_values = ws_clients.get_all_values()
-    phone = str(sale_data["phone"]).replace(" ", "").replace("+", "")
+    phone = normalize_phone(sale_data["phone"])
     today_str = date.today().strftime("%d.%m.%Y")
 
     if len(all_values) > 1:
@@ -265,7 +274,7 @@ def update_client_db(ws_clients, sale_data):
 
         for i, row in enumerate(all_values[1:], start=2):
             if len(row) > tel_idx:
-                row_phone = str(row[tel_idx]).replace(" ", "").replace("+", "")
+                row_phone = normalize_phone(row[tel_idx])
                 if row_phone == phone:
                     try:
                         jami_idx = headers.index("Jami Savdolar")
@@ -302,7 +311,7 @@ def check_duplicate(phone: str) -> dict:
     if len(all_values) < 2:
         return {"exists": False}
     headers = all_values[0]
-    phone_clean = str(phone).replace(" ", "").replace("-", "").replace("+", "")
+    phone_clean = normalize_phone(phone)
     try:
         tel_idx = headers.index("Telefon")
         holat_idx = headers.index("Holat")
