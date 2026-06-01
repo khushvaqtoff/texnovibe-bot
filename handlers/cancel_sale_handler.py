@@ -1,7 +1,7 @@
 """
 TexnoVibe — handlers/cancel_sale_handler.py
 Savdoni bekor qilish paneli.
-Ustun nomlariga bog'lanmasdan, indekslar orqali aniq ishlaydigan variant.
+Sarlavha nomlarini aqlli qidirish orqali ustunlar chalkashligini to'liq hal qiluvchi variant.
 """
 
 import logging
@@ -12,10 +12,6 @@ from datetime import date
 import html
 
 logger = logging.getLogger(__name__)
-
-# Boshqaruv ustunlari indekslari (Google Sheets'da 1 dan boshlanadi)
-STATUS_COLUMN = 14       # N ustuni - Holat
-CANCEL_DATE_COLUMN = 17  # Q ustuni - Bekor qilingan sana
 
 # States
 CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM = range(3)
@@ -30,6 +26,16 @@ def format_money(amount) -> str:
 
 def escape_html(text) -> str:
     return html.escape(str(text)) if text else ""
+
+
+def find_column_index(headers, keys):
+    """Sarlavhalar ichidan kalit so'zlarga mos keladigan ustun indeksini qaytaradi (1-boshlanadi)"""
+    for idx, h in enumerate(headers, start=1):
+        header_lower = str(h).strip().lower()
+        for key in keys:
+            if key in header_lower:
+                return idx
+    return None
 
 
 async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,34 +59,41 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sh = get_spreadsheet()
         ws = sh.worksheet("Savdolar")
         
-        # Barcha qatorlarni massiv (list) ko'rinishida olamiz
         all_rows = ws.get_all_values()
         if not all_rows:
             await status_msg.edit_text("📭 Jadval bo'sh.")
             return ConversationHandler.END
 
-        found_sales = []
+        headers = all_rows[0]
         
-        # 1-qator sarlavhalar bo'lgani uchun 2-qatordan (indeks 1) boshlaymiz
-        for idx, row in enumerate(all_rows[1:], start=2):
-            # Agar qator bo'sh bo'lsa yoki kerakli ustunlar yetishmasa o'tkazib yuboramiz
-            if len(row) < 5:
-                continue
+        # Ustunlar indekslarini sarlavha matniga qarab dinamik aniqlaymiz
+        id_col = find_column_index(headers, ["id", "savdo id"]) or 1
+        name_col = find_column_index(headers, ["mijoz", "ism", "fio", "f.i.o"]) or 2
+        chat_col = find_column_index(headers, ["chat", "telegram id", "mijoz id"]) or 3
+        tovar_col = find_column_index(headers, ["tovar", "mahsulot", "buyum"]) or 5
+        status_col = find_column_index(headers, ["holat", "status"]) or 14
 
-            # N-ustun (index 13) - Holat
-            holat = str(row[13]).strip().lower() if len(row) >= 14 else ""
+        # Indekslarni context'da saqlab turamiz, keyingi funksiyalarda ham ishlatish uchun
+        context.user_data["cols"] = {
+            "id": id_col, "name": name_col, "chat": chat_col, 
+            "tovar": tovar_col, "status": status_col
+        }
+
+        found_sales = []
+        for idx, row in enumerate(all_rows[1:], start=2):
+            # 1. Holatni tekshirish
+            holat = str(row[status_col - 1]).strip().lower() if len(row) >= status_col else ""
             if "bekor" in holat or holat == "yakunlangan":
                 continue
 
-            # Qidirilayotgan matnni butun qator ichidan qidiramiz (Ism yoki Tel)
+            # 2. Qidiruv matnini tekshirish
             row_dump = " ".join([str(cell).lower() for cell in row])
             if query_text in row_dump:
                 found_sales.append({
                     "row_index": idx,
-                    "savdo_id": row[0],    # A ustuni
-                    "mijoz_ismi": row[1],  # B ustuni
-                    "chat_id": row[2],     # C ustuni
-                    "tovar": row[4]        # E ustuni
+                    "savdo_id": row[id_col - 1] if len(row) >= id_col else "",
+                    "mijoz_ismi": row[name_col - 1] if len(row) >= name_col else "Noma'lum",
+                    "tovar": row[tovar_col - 1] if len(row) >= tovar_col else "Tovar"
                 })
 
         await status_msg.delete()
@@ -89,14 +102,13 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("📭 Bunday ma'lumotga ega faol nasiya savdosi topilmadi.")
             return ConversationHandler.END
 
-        # Inline tugmalarni shakllantiramiz
         keyboard = []
         for s in found_sales[:10]:
-            nomi = s["mijoz_ismi"] if s["mijoz_ismi"] else "Noma'lum"
-            tovar = s["tovar"] if s["tovar"] else "Tovar"
+            nomi = s["mijoz_ismi"]
+            tovar = s["tovar"]
             savdo_id = s["savdo_id"]
-            
             id_str = f" [{savdo_id}]" if savdo_id else ""
+            
             btn_text = f"👤 {nomi} | 📦 {tovar}{id_str}"
             keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"cnlsel_{s['row_index']}")])
 
@@ -121,20 +133,24 @@ async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     row_idx = int(query.data.split("_")[1])
     context.user_data["selected_sale_index"] = row_idx
+    cols = context.user_data.get("cols", {})
 
     try:
         sh = get_spreadsheet()
         ws = sh.worksheet("Savdolar")
         row_data = ws.row_values(row_idx)
 
-        # Ma'lumotlarni indeks bo'yicha aniq yuklaymiz
-        savdo_id = row_data[0] if len(row_data) >= 1 else "—"
-        mijoz_ismi = row_data[1] if len(row_data) >= 2 else "—"
-        chat_id = row_data[2] if len(row_data) >= 3 else ""
-        tovar_nomi = row_data[4] if len(row_data) >= 5 else "—"
-        jami = format_money(row_data[5]) if len(row_data) >= 6 else "0"
+        # Saqlab olingan aniq indekslar bo'yicha ma'lumotlarni o'qiymiz
+        savdo_id = row_data[cols["id"] - 1] if len(row_data) >= cols["id"] else "—"
+        mijoz_ismi = row_data[cols["name"] - 1] if len(row_data) >= cols["name"] else "—"
+        chat_id = row_data[cols["chat"] - 1] if len(row_data) >= cols["chat"] else ""
+        tovar_nomi = row_data[cols["tovar"] - 1] if len(row_data) >= cols["tovar"] else "—"
+        
+        # Narx ustunini ham qidirib ko'ramiz
+        headers = ws.row_values(1)
+        price_col = find_column_index(headers, ["jami", "narxi", "summa"]) or 6
+        jami = format_money(row_data[price_col - 1]) if len(row_data) >= price_col else "0"
 
-        # Keyingi bosqich uchun ma'lumotlarni user_data'ga saqlaymiz
         context.user_data["sale_info"] = {
             "savdo_id": savdo_id,
             "mijoz_ismi": mijoz_ismi,
@@ -182,20 +198,24 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sale_index = context.user_data.get("selected_sale_index")
     sale_info = context.user_data.get("sale_info", {})
+    cols = context.user_data.get("cols", {})
 
     await query.edit_message_text("⏳ Google Sheets yangilanmoqda va mijozga xabar yuborilmoqda...")
 
     try:
         sh = get_spreadsheet()
         ws = sh.worksheet("Savdolar")
+        headers = ws.row_values(1)
         
         today = date.today().strftime("%d.%m.%Y")
         
-        # 1. Google Sheets hujayralarini yangilaymiz
-        ws.update_cell(sale_index, STATUS_COLUMN, "Bekor qilindi")
-        ws.update_cell(sale_index, CANCEL_DATE_COLUMN, f"Bekor qilindi: {today}")
+        # Dinamik ravishda aynan kerakli ustun katakchalarini yangilaymiz
+        status_column_idx = cols.get("status") or find_column_index(headers, ["holat", "status"]) or 14
+        cancel_date_idx = find_column_index(headers, ["bekor qilingan sana", "bekor", "sana"]) or 17
+        
+        ws.update_cell(sale_index, status_column_idx, "Bekor qilindi")
+        ws.update_cell(sale_index, cancel_date_idx, f"Bekor qilindi: {today}")
 
-        # Qatorni vizual qizil rangga o'tkazish
         try:
             row_range = f"A{sale_index}:U{sale_index}"
             ws.format(row_range, {
@@ -210,7 +230,6 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tovar_nomi = sale_info.get("tovar_nomi", "Tovar")
         mijoz_chat_id = sale_info.get("chat_id", "")
 
-        # Adminga chiroyli yakuniy hisobot
         id_text = f"<b>ID:</b> {escape_html(savdo_id)}\n" if savdo_id else ""
         await query.edit_message_text(
             f"✅ <b>SAVDO BEKOR QILINDI</b>\n"
