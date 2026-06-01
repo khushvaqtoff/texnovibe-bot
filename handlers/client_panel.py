@@ -6,12 +6,19 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
     get_spreadsheet, ensure_worksheets,
-    get_payment_history, save_client_chat_id
+    get_payment_history, save_client_chat_id, ws_to_records
 )
 from datetime import date
 import os
 
 REGISTER_PHONE = 40
+
+def safe_float(val):
+    try:
+        return float(str(val).replace(" ", "").replace(",", "").strip() or 0)
+    except:
+        return 0
+
 
 def format_money(amount) -> str:
     try:
@@ -22,7 +29,7 @@ def format_money(amount) -> str:
 
 def get_client_keyboard():
     keyboard = [
-        [KeyboardButton("📊 Mening Kreditim")],
+        [KeyboardButton("📊 Mening Nasiyam")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
         [KeyboardButton("🛍 Katalog")],
         [KeyboardButton("🛒 Buyurtma Berish")],
@@ -71,7 +78,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sh = get_spreadsheet()
         sheets = ensure_worksheets(sh)
         ws_sales = sheets["Savdolar"]
-        records = ws_sales.get_all_records()
+        records = ws_to_records(ws_sales)
 
         found_rec = None
         for rec in records:
@@ -152,7 +159,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         ws_clients = sheets["Mijozlar"]
         ws_sales = sheets["Savdolar"]
 
-        client_records = ws_clients.get_all_records()
+        client_records = ws_to_records(ws_clients)
         phone = None
         fio = None
 
@@ -170,7 +177,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             )
             return
 
-        sale_records = ws_sales.get_all_records()
+        sale_records = ws_to_records(ws_sales)
         phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
         active_sales = []
 
@@ -222,7 +229,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
         history = get_payment_history(phone)
         if history:
-            total_paid = sum(float(r.get("To'lov Summasi", 0)) for r in history)
+            total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in history)
             text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
             for rec in history[-5:]:
                 sana = rec.get("To'lov Sanasi", "")

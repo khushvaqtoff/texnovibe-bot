@@ -6,7 +6,7 @@ Admin Telegramga xabar oladi
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from sheets.google_sheets import get_spreadsheet
+from sheets.google_sheets import get_spreadsheet, ws_to_records
 from handlers.catalog_handler import ensure_catalog_sheet
 from datetime import datetime  # TUZATISH: date o'rniga datetime ishlatiladi
 import os
@@ -26,7 +26,7 @@ def format_money(amount) -> str:
 def get_active_products():
     sh = get_spreadsheet()
     ws = ensure_catalog_sheet(sh)
-    records = ws.get_all_records()
+    records = ws_to_records(ws)
     return [r for r in records if r.get("Holat") == "Faol"]
 
 
@@ -183,7 +183,7 @@ async def order_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from sheets.google_sheets import ensure_worksheets
         sheets = ensure_worksheets(sh)
         ws_clients = sheets["Mijozlar"]
-        client_records = ws_clients.get_all_records()
+        client_records = ws_to_records(ws_clients)
 
         client_phone = ""
         client_fio = ""
@@ -278,7 +278,7 @@ async def cmd_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         ws = sh.worksheet("Buyurtmalar")
-        records = ws.get_all_records()
+        records = ws_to_records(ws)
 
         if not records:
             await update.message.reply_text("📋 Hali hech qanday buyurtma yo'q.")

@@ -89,7 +89,7 @@ def get_admin_keyboard():
 def get_client_keyboard():
     """Mijoz uchun pastki menyu"""
     keyboard = [
-        [KeyboardButton("📊 Mening Kreditim")],
+        [KeyboardButton("📊 Mening Nasiyam")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
         [KeyboardButton("🛍 Katalog")],
         [KeyboardButton("🛒 Buyurtma Berish")],
@@ -429,7 +429,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
 
     # === MIJOZ TUGMA HANDLERLARI ===
-    app.add_handler(MessageHandler(filters.Regex("^📊 Mening Kreditim$"), cmd_mening_malumotlarim))
+    app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"), cmd_mening_malumotlarim))
 
     # ✅ FIX 3: cmd_register handler qo'shildi
     app.add_handler(CommandHandler("register", cmd_register))
