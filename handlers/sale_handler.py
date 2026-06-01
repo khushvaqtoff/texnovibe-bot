@@ -278,9 +278,30 @@ async def get_agent(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return PAY_DAY
     else:
-        context.user_data["pay_day"] = 0
-        return await show_confirm(update, context)
+        # Haftalik uchun haftaning kunini tanlash
+        keyboard = [[
+            InlineKeyboardButton("Dushanba", callback_data="payday_1"),
+            InlineKeyboardButton("Seshanba", callback_data="payday_2"),
+            InlineKeyboardButton("Chorshanba", callback_data="payday_3"),
+        ], [
+            InlineKeyboardButton("Payshanba", callback_data="payday_4"),
+            InlineKeyboardButton("Juma", callback_data="payday_5"),
+            InlineKeyboardButton("Shanba", callback_data="payday_6"),
+        ], [
+            InlineKeyboardButton("Yakshanba", callback_data="payday_7"),
+        ]]
+        await update.message.reply_text(
+            "9️⃣ Har hafta qaysi kuni to'lov qiladi?\n"
+            "To'lov kunini tanlang:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return PAY_DAY
 
+
+WEEK_DAYS = {
+    1: "Dushanba", 2: "Seshanba", 3: "Chorshanba",
+    4: "Payshanba", 5: "Juma", 6: "Shanba", 7: "Yakshanba"
+}
 
 async def get_pay_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -289,7 +310,12 @@ async def get_pay_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     day = int(query.data.replace("payday_", ""))
     context.user_data["pay_day"] = day
 
-    await query.edit_message_text(f"✅ To'lov kuni: har oyning {day}-si")
+    pay_type = context.user_data.get("payment_type", "Oylik")
+    if pay_type == "Haftalik":
+        day_name = WEEK_DAYS.get(day, str(day))
+        await query.edit_message_text(f"✅ To'lov kuni: har hafta {day_name}")
+    else:
+        await query.edit_message_text(f"✅ To'lov kuni: har oyning {day}-si")
     return await show_confirm_callback(query, context)
 
 
@@ -315,7 +341,12 @@ async def show_confirm(update, context):
         f"📆 Har {period_word}: {format_money(pay_per)} so'm\n"
     )
     if data.get("pay_day"):
-        summary += f"🔔 To'lov kuni: har oyning {data['pay_day']}-si\n"
+        pay_type_c = data.get("payment_type", "Oylik")
+        if pay_type_c == "Haftalik":
+            _day_name = WEEK_DAYS.get(int(data["pay_day"]), str(data["pay_day"]))
+            summary += f"🔔 To'lov kuni: har hafta {_day_name}\n"
+        else:
+            summary += f"🔔 To'lov kuni: har oyning {data['pay_day']}-si\n" 
     if data.get("agent"):
         summary += f"👨‍💼 Agent: {data['agent']}\n"
     summary += "━━━━━━━━━━━━━━━━━━━━"
@@ -353,7 +384,12 @@ async def show_confirm_callback(query, context):
         f"📆 Har {period_word}: {format_money(pay_per)} so'm\n"
     )
     if data.get("pay_day"):
-        summary += f"🔔 To'lov kuni: har oyning {data['pay_day']}-si\n"
+        pay_type_c = data.get("payment_type", "Oylik")
+        if pay_type_c == "Haftalik":
+            _day_name = WEEK_DAYS.get(int(data["pay_day"]), str(data["pay_day"]))
+            summary += f"🔔 To'lov kuni: har hafta {_day_name}\n"
+        else:
+            summary += f"🔔 To'lov kuni: har oyning {data['pay_day']}-si\n" 
     if data.get("agent"):
         summary += f"👨‍💼 Agent: {data['agent']}\n"
     summary += "━━━━━━━━━━━━━━━━━━━━"

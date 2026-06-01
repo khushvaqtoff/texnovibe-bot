@@ -135,9 +135,16 @@ def add_sale(sale_data: dict) -> dict:
     payment_per_period = round(remaining / period)
     import calendar
     if sale_data["payment_type"] == "Haftalik":
-        next_payment = today + timedelta(weeks=1)
-        # Haftalik uchun to'lov kuni: haftaning kuni (1=Dushanba)
-        sale_data["pay_day"] = sale_data.get("pay_day", 0) or next_payment.isoweekday()
+        pay_day = int(sale_data.get("pay_day", 0) or 0)
+        if pay_day > 0:
+            # Keyingi to'lov kuniga (haftaning kuni 1=Dushanba) o'tamiz
+            days_ahead = pay_day - today.isoweekday()
+            if days_ahead <= 0:
+                days_ahead += 7
+            next_payment = today + timedelta(days=days_ahead)
+        else:
+            next_payment = today + timedelta(weeks=1)
+            sale_data["pay_day"] = next_payment.isoweekday()
     else:
         pay_day = int(sale_data.get("pay_day", 0) or 0)
         if pay_day > 0:
