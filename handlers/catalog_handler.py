@@ -1,6 +1,6 @@
 """
 TexnoVibe — handlers/catalog_handler.py
-Mustaqil va xavfsiz talqin (sheets.catalog_sheets moduliga ehtiyoj yo'q).
+Yakuniy universal talqin: order_handler va bot.py talab qilgan barcha importlarni o'z ichiga oladi.
 """
 
 import logging
@@ -28,6 +28,20 @@ def format_money(amount) -> str:
 
 def escape_html(text) -> str:
     return html.escape(str(text)) if text else ""
+
+
+def ensure_catalog_sheet():
+    """
+    order_handler.py yoki boshqa modullar talab qiladigan varoqni tekshirish funksiyasi.
+    'Tovarlar' varog'i borligini ta'minlaydi va qaytaradi.
+    """
+    try:
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        return sheets["Tovarlar"]
+    except Exception as e:
+        logger.error(f"ensure_catalog_sheet'da xatolik: {e}")
+        raise e
 
 
 # ─────────────────────────────────────────────
@@ -160,11 +174,9 @@ async def cat_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("⏳ Google Sheets yangilanmoqda...")
 
     try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws = sheets["Tovarlar"]
+        ws = ensure_catalog_sheet()
 
-        # [Nom, Narx, Tavsif, Photo_ID] tartibida yozamiz
+        # [Nom, Narx, Tavsif, Photo_ID] tartibida yozish
         ws.append_row([
             d["cat_name"], 
             d["cat_price"], 
@@ -190,9 +202,7 @@ async def cat_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await update.message.reply_text("⏳ Katalog yuklanmoqda...")
     try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws = sheets["Tovarlar"]
+        ws = ensure_catalog_sheet()
         records = ws.get_all_records()
         await status_msg.delete()
     except Exception as e:
@@ -210,7 +220,6 @@ async def cmd_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     for i, p in enumerate(records, 1):
-        # Ustun nomlari jadvalingizda qanday bo'lsa shunday olinadi
         nom = p.get("Tovar Nomi") or p.get("nom") or p.get("Nom") or "—"
         narxi = p.get("Narxi") or p.get("narx") or p.get("Narx") or 0
         tavsif = p.get("Tavsif") or p.get("tavsif") or ""
@@ -251,18 +260,14 @@ async def cmd_remove_product(update: Update, context: ContextTypes.DEFAULT_TYPE)
     status_msg = await update.message.reply_text("⏳ Tovar o'chirilmoqda...")
 
     try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws = sheets["Tovarlar"]
-        
-        # Barcha qatorlarni tekshirib chiqamiz
+        ws = ensure_catalog_sheet()
         cells = ws.get_all_values()
         row_to_delete = None
         real_name = ""
 
         for idx, row in enumerate(cells, start=1):
             if idx == 1:
-                continue # Sarlavha qatorini tashlab ketamiz
+                continue
             if row and row[0].strip().lower() == nom_qidiruv:
                 row_to_delete = idx
                 real_name = row[0]
