@@ -285,7 +285,7 @@ def record_payment(phone: str, amount: float) -> dict:
     pay_id = f"PAY-{max(0, len(payment_records)-1):04d}"
     ws_payments.append_row([pay_id, target_row.get("ID"), target_row.get("FIO"), phone, amount, today.strftime("%d.%m.%Y"), new_remaining])
     update_rating(ws_sales, row_index, today, target_row)
-    return {"success": True, "fio": target_row.get("FIO"), "paid": amount, "old_remaining": old_remaining,
+    return {"success": True, "fio": target_row.get("FIO"), "tovar": target_row.get("Tovar", ""), "paid": amount, "old_remaining": old_remaining,
             "new_remaining": new_remaining, "next_payment": next_date.strftime("%d.%m.%Y"),
             "is_closed": new_remaining == 0, "bonus": new_bonus, "chat_id": target_row.get("Chat ID", "")}
 

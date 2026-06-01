@@ -113,12 +113,17 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         next_pay = result["next_payment"]
         bonus = format_money(result.get("bonus", 0))
 
+        tovar = result.get("tovar", "")
         if result["is_closed"]:
             admin_msg = (
                 "🎉 *KREDIT TO'LIQ YOPILDI!*\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 f"👤 Mijoz: *{fio}*\n"
                 f"📞 Telefon: `{phone}`\n"
+            )
+            if tovar:
+                admin_msg += f"🛍 Tovar: *{tovar}*\n"
+            admin_msg += (
                 f"💵 So'nggi to'lov: *{paid} so'm*\n"
                 f"✅ Qoldiq: *0 so'm*\n"
                 f"🏆 Bonus: *{bonus} so'm*\n"
@@ -130,6 +135,10 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 f"👤 Mijoz: *{fio}*\n"
                 f"📞 Telefon: `{phone}`\n"
+            )
+            if tovar:
+                admin_msg += f"🛍 Tovar: *{tovar}*\n"
+            admin_msg += (
                 f"💵 To'landi: *{paid} so'm*\n"
                 f"📊 Eski qoldiq: *{old_rem} so'm*\n"
                 f"💰 Yangi qoldiq: *{new_rem} so'm*\n"
@@ -145,9 +154,11 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if client_chat_id and str(client_chat_id).strip():
             try:
                 if result["is_closed"]:
-                    client_msg = (
-                        "🎉 *Tabriklaymiz!*\n\n"
-                        "Siz nasiya qarzingizni to'liq yopdingiz!\n"
+                    client_msg = "🎉 *Tabriklaymiz!*\n\n"
+                    client_msg += "Siz nasiya qarzingizni to'liq yopdingiz!\n"
+                    if tovar:
+                        client_msg += f"🛍 Tovar: *{tovar}*\n"
+                    client_msg += (
                         f"✅ So'nggi to'lov: *{paid} so'm*\n\n"
                         "🏆 Sizga *Ishonchli Mijoz* statusi berildi!\n"
                         "🎁 Keyingi xaridingizda *5% keshbek* taqdim etamiz!\n\n"
@@ -155,8 +166,10 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "Xaridingiz uchun rahmat! TexnoVibe 🏪"
                     )
                 else:
-                    client_msg = (
-                        "✅ *To'lovingiz qabul qilindi!*\n\n"
+                    client_msg = "✅ *To'lovingiz qabul qilindi!*\n\n"
+                    if tovar:
+                        client_msg += f"🛍 Tovar: *{tovar}*\n"
+                    client_msg += (
                         f"💵 To'langan summa: *{paid} so'm*\n"
                         f"💰 Qoldig'ingiz: *{new_rem} so'm*\n"
                         f"📅 Keyingi to'lov: *{next_pay}*\n\n"
