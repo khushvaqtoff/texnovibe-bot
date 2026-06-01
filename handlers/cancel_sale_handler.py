@@ -1,8 +1,5 @@
 """
 TexnoVibe — handlers/cancel_sale_handler.py
-Yangilik: Telefon bo'yicha qidirilganda bir preva faol savdo
-          bo'lsa — inline tugmalar bilan tovar tanlash qo'shildi.
-Tuzatish: f-string ichidagi backslash (\) va Markdown formatlash xatoliklari bartaraf etildi.
 """
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -12,7 +9,7 @@ from datetime import date
 import html
 import os
 
-# Konstantalar (Jadval ustunlari o'zgarsa, shu yerdan o'zgartirish oson)
+# Konstantalar
 STATUS_COLUMN = 14       # N ustuni - Holat
 CANCEL_DATE_COLUMN = 17  # Q ustuni - Bekor qilingan sana
 
@@ -27,15 +24,12 @@ def format_money(amount) -> str:
 
 
 def escape_html(text) -> str:
-    """Telegram HTML formati buzilmasligi uchun maxsus belgilarni xavfsiz qiladi"""
+    """Telegram HTML formati buzilmasligi uchun"""
     return html.escape(str(text)) if text else ""
 
 
 def find_active_sales(phone_or_id: str) -> list[tuple]:
-    """
-    Telefon yoki savdo ID bo'yicha BARCHA faol savdolarni topadi.
-    Qaytaradi: [(rec, row_index), ...]
-    """
+    """Telefon yoki savdo ID bo'yicha BARCHA faol savdolarni topadi."""
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     ws = sheets["Savdolar"]
@@ -45,12 +39,10 @@ def find_active_sales(phone_or_id: str) -> list[tuple]:
     natija = []
 
     for i, rec in enumerate(records, start=2):
-        # Savdo ID bo'yicha aniq qidirish
         if str(rec.get("ID", "")).upper() == search:
             if rec.get("Holat") == "Faol":
-                return [(rec, i)]  # ID topildi — bitta natija yetarli
+                return [(rec, i)]
 
-        # Telefon bo'yicha qidirish
         phone_clean = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
         search_clean = search.replace(" ", "").replace("-", "").replace("+", "")
 
@@ -61,12 +53,11 @@ def find_active_sales(phone_or_id: str) -> list[tuple]:
 
 
 def _sale_card_text(rec: dict) -> str:
-    """Bitta savdo ma'lumotlari matni (HTML formatida — Mutloq xavfsiz)"""
+    """Bitta savdo ma'lumotlari matni (HTML formatida)"""
     jami = format_money(rec.get("Jami Summa", 0))
     qoldiq = format_money(rec.get("Qoldiq", 0))
     avans = format_money(rec.get("Boshlang'ich To'lov", 0))
 
-    # SyntaxError'dan qochish uchun backslash bor kalitlarni f-string tashqarisida olamiz
     to_lov_turi = rec.get("To'lov Turi") or rec.get("To\'lov Turi") or ""
     keyingi_sana = rec.get("Keyingi To'lov Sanasi") or rec.get("Keyingi To\'lov Sanasi") or ""
 
@@ -88,9 +79,7 @@ def _sale_card_text(rec: dict) -> str:
     )
 
 
-# ─────────────────────────────────────────────
 # 1. BOSHLASH
-# ─────────────────────────────────────────────
 async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
@@ -102,9 +91,7 @@ async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CANCEL_SEARCH
 
 
-# ─────────────────────────────────────────────
 # 2. QIDIRISH
-# ─────────────────────────────────────────────
 async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_text = update.message.text.strip()
     status_msg = await update.message.reply_text("⏳ Qidirilmoqda...")
@@ -120,7 +107,6 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return CANCEL_SEARCH
 
-        # ── Bitta savdo topilganda ─────────────────────────
         if len(natija) == 1:
             rec, row_index = natija[0]
             context.user_data["cancel_row"] = row_index
@@ -138,7 +124,6 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return CANCEL_CONFIRM
 
-        # ── Bir nechta savdo topilganda ────────────────────
         context.user_data["cancel_natija"] = [
             {"rec": r, "row_index": ri} for r, ri in natija
         ]
@@ -172,9 +157,7 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 
-# ─────────────────────────────────────────────
 # 3. TOVAR TANLASH
-# ─────────────────────────────────────────────
 async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -212,9 +195,7 @@ async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CANCEL_CONFIRM
 
 
-# ─────────────────────────────────────────────
-# 4. TASDIQLASH (Google Sheets'ga yozish)
-# ─────────────────────────────────────────────
+# 4. TASDIQLASH
 async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -236,11 +217,9 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         today = date.today().strftime("%d.%m.%Y")
         
-        # Ustunlarni yangilash
         ws.update_cell(row_index, STATUS_COLUMN, "Bekor qilindi")
         ws.update_cell(row_index, CANCEL_DATE_COLUMN, f"Bekor qilindi: {today}")
 
-        # Qatorni dizaynini o'zgartirish (Qizil rang + o'chirilgan tekst)
         try:
             row_range = f"A{row_index}:U{row_index}"
             ws.format(row_range, {
@@ -257,3 +236,51 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         qoldiq = format_money(rec.get("Qoldiq", 0))
 
         await query.edit_message_text(
+            "✅ <b>SAVDO BEKOR QILINDI</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 ID: <code>{escape_html(sid)}</code>\n"
+            f"👤 Mijoz: <b>{escape_html(fio)}</b>\n"
+            f"🛍 Tovar: <b>{escape_html(tovar)}</b>\n"
+            f"💵 Jami: {jami} so'm\n"
+            f"💰 Qoldiq edi: {qoldiq} so'm\n"
+            f"📅 Bekor qilindi: {today}\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "📊 Google Sheets muvaffaqiyatli yangilandi! ✅",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Sheets'ga yozishda xatolik: <code>{escape_html(str(e))}</code>",
+            parse_mode="HTML"
+        )
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+# BOSH MENYU / CANCEL
+async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    admin_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
+    user_id = update.effective_user.id
+
+    if user_id == admin_id:
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton("➕ Yangi Savdo"),     KeyboardButton("💰 To'lov Qabul")],
+            [KeyboardButton("❌ Bekor Qilish"),    KeyboardButton("📅 Bugungi To'lovlar")],
+            [KeyboardButton("👥 Mijozlar"),        KeyboardButton("📊 Statistika")],
+            [KeyboardButton("⚠️ Qarzdorlar"),      KeyboardButton("🚫 Qora Ro'yxat")],
+            [KeyboardButton("⭐ Reyting"),          KeyboardButton("🔍 Qidirish")],
+            [KeyboardButton("🎯 Auksion"),          KeyboardButton("📥 Excel Eksport")],
+            [KeyboardButton("🏠 Bosh Menyu")],
+        ], resize_keyboard=True)
+    else:
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton("📊 Mening Kreditim")],
+            [KeyboardButton("📝 Ro'yxatdan O'tish")],
+            [KeyboardButton("🏠 Bosh Menyu")],
+        ], resize_keyboard=True)
+
+    await update.message.reply_text("🏠 Bosh menyuga qaytildi.", reply_markup=keyboard)
+    context.user_data.clear()
+    return ConversationHandler.END
