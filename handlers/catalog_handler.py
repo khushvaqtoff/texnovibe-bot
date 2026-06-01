@@ -1,18 +1,13 @@
 """
 TexnoVibe — handlers/catalog_handler.py
-Yangilik: Tovar qo'shishda rasm yuklash qo'shildi (CAT_PHOTO state)
-Tuzatish: Bot import qila oladigan barcha funksiya nomlari tartibga solindi.
+Mustaqil va xavfsiz talqin (sheets.catalog_sheets moduliga ehtiyoj yo'q).
 """
 
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-
-from sheets.catalog_sheets import (
-    add_product_to_sheet,
-    get_all_products,
-    remove_product_from_sheet,
-)
+from sheets.google_sheets import get_spreadsheet, ensure_worksheets
+import html
 
 logger = logging.getLogger(__name__)
 
@@ -20,54 +15,65 @@ logger = logging.getLogger(__name__)
 CAT_NAME    = 0
 CAT_PRICE   = 1
 CAT_DESC    = 2
-CAT_PHOTO   = 3   # rasm yuklash bosqichi
+CAT_PHOTO   = 3   # Rasm yuklash bosqichi
 CAT_CONFIRM = 4
 
 
+def format_money(amount) -> str:
+    try:
+        return f"{int(float(amount)):,}".replace(",", " ")
+    except (ValueError, TypeError):
+        return str(amount)
+
+
+def escape_html(text) -> str:
+    return html.escape(str(text)) if text else ""
+
+
 # ─────────────────────────────────────────────
-# TOVAR QO'SHISH — boshlash
+# 1. TOVAR QO'SHISH — BOSHLASH
 # ─────────────────────────────────────────────
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "📦 *Yangi tovar qo'shish*\n\n"
+        "📦 <b>Yangi tovar qo'shish</b>\n\n"
         "1️⃣ Tovar nomini yozing:",
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     return CAT_NAME
 
 
 # ─────────────────────────────────────────────
-# 1. Nom
+# 2. NOMNI QABUL QILISH
 # ─────────────────────────────────────────────
 async def cat_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["cat_name"] = update.message.text.strip()
     await update.message.reply_text(
-        "2️⃣ Narxini yozing (so'mda):\nMasalan: `3500000`",
-        parse_mode="Markdown",
+        "2️⃣ Narxini yozing (so'mda):\nMasalan: <code>3500000</code>",
+        parse_mode="HTML",
     )
     return CAT_PRICE
 
 
 # ─────────────────────────────────────────────
-# 2. Narx
+# 3. NARXNI QABUL QILISH
 # ─────────────────────────────────────────────
 async def cat_get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().replace(" ", "").replace(",", "")
     if not text.isdigit():
-        await update.message.reply_text("❌ Faqat raqam kiriting! Masalan: `3500000`", parse_mode="Markdown")
+        await update.message.reply_text("❌ Faqat raqam kiriting! Masalan: <code>3500000</code>", parse_mode="HTML")
         return CAT_PRICE
 
     context.user_data["cat_price"] = int(text)
     await update.message.reply_text(
-        "3️⃣ Qisqacha tavsif yozing:\nMasalan: `Samsung 55\" 4K OLED TV`",
-        parse_mode="Markdown",
+        "3️⃣ Qisqacha tavsif yozing:\nMasalan: <code>Samsung 55\" 4K OLED TV</code>",
+        parse_mode="HTML",
     )
     return CAT_DESC
 
 
 # ─────────────────────────────────────────────
-# 3. Tavsif
+# 4. TAVSIFNI QABUL QILISH
 # ─────────────────────────────────────────────
 async def cat_get_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["cat_desc"] = update.message.text.strip()
@@ -75,20 +81,18 @@ async def cat_get_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("⏭ O'tkazib yuborish", callback_data="cat_skip_photo")]]
     await update.message.reply_text(
         "4️⃣ Tovar rasmini yuboring 📸\n\n"
-        "_(Rasm bo'lmasa pastdagi tugmani bosing)_",
-        "Markdown",
+        "<i>(Rasm bo'lmasa pastdagi tugmani bosing)</i>",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     return CAT_PHOTO
 
 
 # ─────────────────────────────────────────────
-# 4. Rasm
+# 5. RASMNI QABUL QILISH YOKI O'TKAZIB YUBORISH
 # ─────────────────────────────────────────────
 async def cat_get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Foydalanuvchi rasm yuborsa saqlaydi"""
     if update.message and update.message.photo:
-        # Eng yuqori sifatli rasmni olish
         photo = update.message.photo[-1]
         context.user_data["cat_photo_id"] = photo.file_id
         await update.message.reply_text("✅ Rasm qabul qilindi!")
@@ -99,7 +103,6 @@ async def cat_get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cat_skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """'O'tkazib yuborish' tugmasi bosilsa"""
     query = update.callback_query
     await query.answer()
     context.user_data["cat_photo_id"] = None
@@ -108,17 +111,16 @@ async def cat_skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _show_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, via_query=False):
-    """Tasdiqlash xabarini ko'rsatish"""
     d = context.user_data
-    narx_formatlangan = f"{d['cat_price']:,}".replace(",", " ")
+    narx_formatlangan = format_money(d['cat_price'])
     photo_info = "✅ Rasm bor" if d.get("cat_photo_id") else "🚫 Rasmsiz"
 
     text = (
-        "📋 *Tovar ma'lumotlari:*\n\n"
-        f"📦 Nom: `{d['cat_name']}`\n"
-        f"💰 Narx: `{narx_formatlangan} so'm`\n"
-        f"📝 Tavsif: `{d['cat_desc']}`\n"
-        f"🖼 Rasm: {photo_info}\n\n"
+        "📋 <b>Tovar ma'lumotlari:</b>\n\n"
+        f"📦 Nom: <code>{escape_html(d['cat_name'])}</code>\n"
+        f"💰 Narx: <b>{narx_formatlangan} so'm</b>\n"
+        f"📝 Tavsif: <i>{escape_html(d['cat_desc'])}</i>\n"
+        f"🖼 Rasm: <b>{photo_info}</b>\n\n"
         "Tasdiqlaysizmi?"
     )
 
@@ -134,17 +136,17 @@ async def _show_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, via_
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=text,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=markup,
         )
     else:
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
 
     return CAT_CONFIRM
 
 
 # ─────────────────────────────────────────────
-# 5. Tasdiqlash
+# 6. TASDIQLASH VA GOOGLE SHEETS'GA YOZISH
 # ─────────────────────────────────────────────
 async def cat_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -155,84 +157,123 @@ async def cat_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     d = context.user_data
+    await query.edit_message_text("⏳ Google Sheets yangilanmoqda...")
+
     try:
-        add_product_to_sheet(
-            name=d["cat_name"],
-            price=d["cat_price"],
-            desc=d["cat_desc"],
-            photo_id=d.get("cat_photo_id"),
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        ws = sheets["Tovarlar"]
+
+        # [Nom, Narx, Tavsif, Photo_ID] tartibida yozamiz
+        ws.append_row([
+            d["cat_name"], 
+            d["cat_price"], 
+            d["cat_desc"], 
+            d.get("cat_photo_id") or ""
+        ])
+
+        await query.edit_message_text(
+            f"✅ <b>{escape_html(d['cat_name'])}</b> katalogga muvaffaqiyatli qo'shildi!",
+            parse_mode="HTML",
         )
     except Exception as e:
         logger.error(f"Katalog saqlashda xato: {e}")
-        await query.edit_message_text("❌ Xato yuz berdi. Qayta urinib ko'ring.")
-        return ConversationHandler.END
+        await query.edit_message_text(f"❌ Xato yuz berdi: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
 
-    await query.edit_message_text(
-        f"✅ *{d['cat_name']}* katalogga qo'shildi!",
-        parse_mode="Markdown",
-    )
     context.user_data.clear()
     return ConversationHandler.END
 
 
 # ─────────────────────────────────────────────
-# KATALOGNI KO'RISH
+# KATALOGNI KO'RISH (Barcha foydalanuvchilar uchun)
 # ─────────────────────────────────────────────
 async def cmd_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Barcha tovarlarni rasmli yoki rasmsiz ko'rsatish"""
+    status_msg = await update.message.reply_text("⏳ Katalog yuklanmoqda...")
     try:
-        products = get_all_products()
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        ws = sheets["Tovarlar"]
+        records = ws.get_all_records()
+        await status_msg.delete()
     except Exception as e:
         logger.error(f"Katalog olishda xato: {e}")
-        await update.message.reply_text("❌ Katalogni yuklab bo'lmadi.")
+        await status_msg.edit_text("❌ Katalogni yuklab bo'lmadi.")
         return
 
-    if not products:
+    if not records:
         await update.message.reply_text("📦 Katalog hozircha bo'm-bo'sh.")
         return
 
     await update.message.reply_text(
-        f"🛍 *Katalog — {len(products)} ta tovar*",
-        parse_mode="Markdown",
+        f"🛍 <b>Katalog — {len(records)} ta tovar</b>",
+        parse_mode="HTML",
     )
 
-    for i, p in enumerate(products, 1):
-        narx = f"{int(p.get('narx', 0)):,}".replace(",", " ")
+    for i, p in enumerate(records, 1):
+        # Ustun nomlari jadvalingizda qanday bo'lsa shunday olinadi
+        nom = p.get("Tovar Nomi") or p.get("nom") or p.get("Nom") or "—"
+        narxi = p.get("Narxi") or p.get("narx") or p.get("Narx") or 0
+        tavsif = p.get("Tavsif") or p.get("tavsif") or ""
+        photo_id = p.get("Photo_ID") or p.get("photo_id") or p.get("Rasm") or None
+
+        narx_str = format_money(narxi)
         caption = (
-            f"*{i}. {p.get('nom', '—')}*\n"
-            f"💰 Narx: `{narx} so'm`\n"
-            f"📝 {p.get('tavsif', '')}"
+            f"<b>{i}. {escape_html(nom)}</b>\n"
+            f"💰 Narx: <code>{narx_str} so'm</code>\n"
+            f"📝 <i>{escape_html(tavsif)}</i>"
         )
 
-        photo_id = p.get("photo_id")
         if photo_id:
-            await update.message.reply_photo(
-                photo=photo_id,
-                caption=caption,
-                parse_mode="Markdown",
-            )
+            try:
+                await update.message.reply_photo(
+                    photo=str(photo_id),
+                    caption=caption,
+                    parse_mode="HTML",
+                )
+            except Exception:
+                await update.message.reply_text(caption, parse_mode="HTML")
         else:
-            await update.message.reply_text(caption, parse_mode="Markdown")
+            await update.message.reply_text(caption, parse_mode="HTML")
 
 
 # ─────────────────────────────────────────────
-# TOVAR O'CHIRISH (admin)
+# TOVAR O'CHIRISH (Admin uchun)
 # ─────────────────────────────────────────────
 async def cmd_remove_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
-            "❗ Tovar nomini yozing:\n`/tovarchiqar Samsung TV`",
-            parse_mode="Markdown",
+            "❗ Tovar nomini yozing:\n<code>/tovarchiqar Samsung TV</code>",
+            parse_mode="HTML",
         )
         return
 
-    nom = " ".join(context.args)
+    nom_qidiruv = " ".join(context.args).strip().lower()
+    status_msg = await update.message.reply_text("⏳ Tovar o'chirilmoqda...")
+
     try:
-        result = remove_product_from_sheet(nom)
-        if result:
-            await update.message.reply_text(f"✅ *{nom}* katalogdan o'chirildi.", parse_mode="Markdown")
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        ws = sheets["Tovarlar"]
+        
+        # Barcha qatorlarni tekshirib chiqamiz
+        cells = ws.get_all_values()
+        row_to_delete = None
+        real_name = ""
+
+        for idx, row in enumerate(cells, start=1):
+            if idx == 1:
+                continue # Sarlavha qatorini tashlab ketamiz
+            if row and row[0].strip().lower() == nom_qidiruv:
+                row_to_delete = idx
+                real_name = row[0]
+                break
+
+        if row_to_delete:
+            ws.delete_rows(row_to_delete)
+            await status_msg.edit_text(f"✅ <b>{escape_html(real_name)}</b> katalogdan muvaffaqiyatli o'chirildi!", parse_mode="HTML")
         else:
-            await update.message.reply_text(f"❌ *{nom}* topilmadi.", parse_mode="Markdown")
+            await status_msg.edit_text(f"❌ '{escape_html(nom_qidiruv)}' nomli tovar topilmadi.", parse_mode="HTML")
+
     except Exception as e:
         logger.error(f"O'chirishda xato: {e}")
-        await update.message.reply_text("❌ Xato yuz berdi.")
+        await status_msg.edit_text(f"❌ Xatolik: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
