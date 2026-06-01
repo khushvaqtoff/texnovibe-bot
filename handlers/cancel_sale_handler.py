@@ -1,7 +1,7 @@
 """
 TexnoVibe — handlers/cancel_sale_handler.py
 Savdoni bekor qilish paneli.
-Sarlavha nomlarini aqlli qidirish orqali ustunlar chalkashligini to'liq hal qiluvchi variant.
+Chat ID qidiruv mantiqi maksimal darajada kuchaytirilgan yakuniy variant.
 """
 
 import logging
@@ -67,13 +67,16 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         headers = all_rows[0]
         
         # Ustunlar indekslarini sarlavha matniga qarab dinamik aniqlaymiz
-        id_col = find_column_index(headers, ["id", "savdo id"]) or 1
+        id_col = find_column_index(headers, ["id", "savdo id", "txn"]) or 1
         name_col = find_column_index(headers, ["mijoz", "ism", "fio", "f.i.o"]) or 2
-        chat_col = find_column_index(headers, ["chat", "telegram id", "mijoz id"]) or 3
+        
+        # CHAT ID QIDIRUVINI MAKSIMAL KENGAYTIRDIK (barcha ehtimoliy nomlar)
+        chat_col = find_column_index(headers, ["chat", "telegram id", "mijoz id", "tg id", "user id", "chatid", "tg_id"]) or 3
+        
         tovar_col = find_column_index(headers, ["tovar", "mahsulot", "buyum"]) or 5
         status_col = find_column_index(headers, ["holat", "status"]) or 14
 
-        # Indekslarni context'da saqlab turamiz, keyingi funksiyalarda ham ishlatish uchun
+        # Indekslarni context'da saqlab turamiz
         context.user_data["cols"] = {
             "id": id_col, "name": name_col, "chat": chat_col, 
             "tovar": tovar_col, "status": status_col
@@ -140,13 +143,11 @@ async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ws = sh.worksheet("Savdolar")
         row_data = ws.row_values(row_idx)
 
-        # Saqlab olingan aniq indekslar bo'yicha ma'lumotlarni o'qiymiz
         savdo_id = row_data[cols["id"] - 1] if len(row_data) >= cols["id"] else "—"
         mijoz_ismi = row_data[cols["name"] - 1] if len(row_data) >= cols["name"] else "—"
         chat_id = row_data[cols["chat"] - 1] if len(row_data) >= cols["chat"] else ""
         tovar_nomi = row_data[cols["tovar"] - 1] if len(row_data) >= cols["tovar"] else "—"
         
-        # Narx ustunini ham qidirib ko'ramiz
         headers = ws.row_values(1)
         price_col = find_column_index(headers, ["jami", "narxi", "summa"]) or 6
         jami = format_money(row_data[price_col - 1]) if len(row_data) >= price_col else "0"
@@ -206,10 +207,10 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sh = get_spreadsheet()
         ws = sh.worksheet("Savdolar")
         headers = ws.row_values(1)
+        row_values = ws.row_values(sale_index)
         
         today = date.today().strftime("%d.%m.%Y")
         
-        # Dinamik ravishda aynan kerakli ustun katakchalarini yangilaymiz
         status_column_idx = cols.get("status") or find_column_index(headers, ["holat", "status"]) or 14
         cancel_date_idx = find_column_index(headers, ["bekor qilingan sana", "bekor", "sana"]) or 17
         
@@ -228,7 +229,21 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         savdo_id = sale_info.get("savdo_id", "")
         mijoz_ismi = sale_info.get("mijoz_ismi", "Mijoz")
         tovar_nomi = sale_info.get("tovar_nomi", "Tovar")
+        
+        # AGAR CHAT ID TOPILMAGAN BO'LSA, QATORNING ICHIDAN 6-11 XONALI TELEGRAM ID'LARINI AVTOMATIK SUĞURIB OLISH MANTIQLARI
         mijoz_chat_id = sale_info.get("chat_id", "")
+        if not mijoz_chat_id or not str(mijoz_chat_id).isdigit():
+            chat_col_idx = cols.get("chat") or 3
+            if len(row_values) >= chat_col_idx:
+                mijoz_chat_id = row_values[chat_col_idx - 1]
+        
+        # Ekstremal holat: Agar hali ham topilmasa, butun qatordagi elementlar ichidan Telegram ID ga o'xshashini qidiramiz
+        if not mijoz_chat_id or not str(mijoz_chat_id).isdigit() or len(str(mijoz_chat_id)) < 6:
+            for cell in row_values:
+                val_str = str(cell).strip()
+                if val_str.isdigit() and 7 <= len(val_str) <= 11 and not val_str.startswith("998"):
+                    mijoz_chat_id = val_str
+                    break
 
         id_text = f"<b>ID:</b> {escape_html(savdo_id)}\n" if savdo_id else ""
         await query.edit_message_text(
@@ -241,8 +256,8 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
         
-        # 3. MIJOZNING SHAXSIY TELEGRAMIGA ESLATMA YUBORISH 🚀
-        if mijoz_chat_id and str(mijoz_chat_id).isdigit() and len(str(mijoz_chat_id)) >= 7:
+        # 3. MIJOZNING SHAXSIY TELEGRAMIGA ESLATMA YUBORISH
+        if mijoz_chat_id and str(mijoz_chat_id).isdigit() and len(str(mijoz_chat_id)) >= 6:
             try:
                 await context.bot.send_message(
                     chat_id=int(mijoz_chat_id),
