@@ -113,7 +113,7 @@ def ensure_worksheets(sh):
 
 
 def generate_sale_id(ws_sales):
-    records = ws_sales.get_all_values()
+    records = ws_sales.get_all_records()
     if len(records) <= 1:
         return "TXN-001"
     last_row = records[-1]
@@ -168,20 +168,21 @@ def add_sale(sale_data: dict) -> dict:
     ]
     ws_sales.append_row(row)
     update_client_db(ws_clients, sale_data)
-    schedule = generate_payment_schedule(remaining, payment_per_period, sale_data["payment_type"], period, today)
+    schedule = generate_payment_schedule(remaining, payment_per_period, sale_data["payment_type"], period, next_payment)
     return {"sale_id": sale_id, "remaining": remaining, "payment_per_period": payment_per_period,
             "next_payment": next_payment.strftime("%d.%m.%Y"), "schedule": schedule}
 
 
 def generate_payment_schedule(remaining, per_payment, pay_type, periods, start_date):
+    """start_date = birinchi to'lov sanasi"""
     schedule = []
     current_date = start_date
     current_remaining = remaining
     for i in range(1, periods + 1):
-        current_date = current_date + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
         payment = min(per_payment, current_remaining)
         current_remaining -= payment
         schedule.append({"num": i, "date": current_date.strftime("%d.%m.%Y"), "amount": payment, "remaining": max(0, current_remaining)})
+        current_date = current_date + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
     return schedule
 
 
@@ -210,15 +211,32 @@ def record_payment(phone: str, amount: float) -> dict:
     sheets = ensure_worksheets(sh)
     ws_sales = sheets["Savdolar"]
     ws_payments = sheets["Tolovlar"]
-    records = ws_sales.get_all_records(head=1, default_blank="")
+    all_values = ws_sales.get_all_records()
     target_row = None
     row_index = None
     phone_clean = normalize_phone(phone)
 
-    for i, rec in enumerate(records, start=2):
-        if normalize_phone(rec.get("Telefon", "")) == phone_clean:
-            if rec.get("Holat") == "Faol":
-                target_row = rec
+    if len(all_values) < 2:
+        return {"success": False, "error": "Baza bo'sh"}
+
+    headers = all_values[0]
+
+    def col(name):
+        try:
+            return headers.index(name)
+        except ValueError:
+            return -1
+
+    for i, row in enumerate(all_values[1:], start=2):
+        def get(name, default=""):
+            idx = col(name)
+            if idx < 0 or idx >= len(row):
+                return default
+            return row[idx] if row[idx] != "" else default
+
+        if normalize_phone(get("Telefon")) == phone_clean:
+            if get("Holat") == "Faol":
+                target_row = {h: (row[j] if j < len(row) else "") for j, h in enumerate(headers)}
                 row_index = i
                 break
     if not target_row:
@@ -248,7 +266,7 @@ def record_payment(phone: str, amount: float) -> dict:
         bonus_earned = round(amount * 0.02)
     new_bonus = current_bonus + bonus_earned
     ws_sales.update_cell(row_index, 18, new_bonus)
-    payment_records = ws_payments.get_all_values()
+    payment_records = ws_payments.get_all_records()
     pay_id = f"PAY-{len(payment_records):04d}"
     ws_payments.append_row([pay_id, target_row.get("ID"), target_row.get("FIO"), phone, amount, today.strftime("%d.%m.%Y"), new_remaining])
     update_rating(ws_sales, row_index, today, target_row)
@@ -268,7 +286,7 @@ def update_rating(ws, row_index, today, record):
 
 
 def update_client_db(ws_clients, sale_data):
-    all_values = ws_clients.get_all_values()
+    all_values = ws_clients.get_all_records()
     phone = normalize_phone(sale_data["phone"])
     today_str = date.today().strftime("%d.%m.%Y")
 
@@ -314,7 +332,7 @@ def check_duplicate(phone: str) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     ws = sheets["Savdolar"]
-    all_values = ws.get_all_values()
+    all_values = ws.get_all_records()
     if len(all_values) < 2:
         return {"exists": False}
     headers = all_values[0]
@@ -345,7 +363,7 @@ def get_today_payments() -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     today_str = date.today().strftime("%d.%m.%Y")
-    return [r for r in sheets["Savdolar"].get_all_records(head=1, default_blank="") if r.get("Holat") == "Faol" and r.get("Keyingi To'lov Sanasi") == today_str]
+    return [r for r in sheets["Savdolar"].get_all_records() if r.get("Holat") == "Faol" and r.get("Keyingi To'lov Sanasi") == today_str]
 
 
 def get_overdue_payments(days: int = 3) -> list:
@@ -353,7 +371,7 @@ def get_overdue_payments(days: int = 3) -> list:
     sheets = ensure_worksheets(sh)
     today = date.today()
     result = []
-    for rec in sheets["Savdolar"].get_all_records(head=1, default_blank=""):
+    for rec in sheets["Savdolar"].get_all_records():
         if rec.get("Holat") != "Faol":
             continue
         try:
@@ -371,20 +389,20 @@ def get_payment_history(phone: str) -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     phone_clean = str(phone).replace(" ", "")
-    return [r for r in sheets["Tolovlar"].get_all_records(head=1, default_blank="") if str(r.get("Telefon", "")).replace(" ", "") == phone_clean]
+    return [r for r in sheets["Tolovlar"].get_all_records() if str(r.get("Telefon", "")).replace(" ", "") == phone_clean]
 
 
 def get_all_clients_with_status() -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    active = [r for r in sheets["Savdolar"].get_all_records(head=1, default_blank="") if r.get("Holat") == "Faol"]
+    active = [r for r in sheets["Savdolar"].get_all_records() if r.get("Holat") == "Faol"]
     return sorted(active, key=lambda x: x.get("Reyting", ""))
 
 
 def get_statistics() -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    records = sheets["Savdolar"].get_all_records(head=1, default_blank="")
+    records = sheets["Savdolar"].get_all_records()
     active = [r for r in records if r.get("Holat") == "Faol"]
     closed = [r for r in records if r.get("Holat") == "Yopildi"]
     return {
@@ -402,7 +420,7 @@ def save_client_chat_id(phone: str, chat_id: int, username: str = ""):
     phone_clean = str(phone).replace(" ", "")
     today_str = date.today().strftime("%d.%m.%Y")
 
-    for i, rec in enumerate(ws.get_all_records(head=1, default_blank=""), start=2):
+    for i, rec in enumerate(ws.get_all_records(), start=2):
         if str(rec.get("Telefon", "")).replace(" ", "") == phone_clean:
             ws.update_cell(i, 3, chat_id)
             ws.update_cell(i, 4, username)
@@ -423,7 +441,7 @@ def get_todays_birthdays() -> list:
     sheets = ensure_worksheets(sh)
     today = date.today()
     today_md = f"{today.day:02d}.{today.month:02d}"
-    return [r for r in sheets["Savdolar"].get_all_records(head=1, default_blank="") if str(r.get("Tug'ilgan Kun", ""))[:5] == today_md]
+    return [r for r in sheets["Savdolar"].get_all_records() if str(r.get("Tug'ilgan Kun", ""))[:5] == today_md]
 
 
 def get_client_chat_id(phone: str) -> str:
@@ -435,13 +453,13 @@ def get_client_chat_id(phone: str) -> str:
     phone_digits = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
     # Avval Mijozlar listidan qidirish
-    for rec in sheets["Mijozlar"].get_all_records(head=1, default_blank=""):
+    for rec in sheets["Mijozlar"].get_all_records():
         rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "").strip()
         if rec_phone == phone_digits and str(rec.get("Chat ID", "")).strip():
             return str(rec.get("Chat ID", "")).strip()
 
     # Topilmasa Savdolar listidan qidirish (Chat ID ustuni bor bolsa)
-    for rec in sheets["Savdolar"].get_all_records(head=1, default_blank=""):
+    for rec in sheets["Savdolar"].get_all_records():
         rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "").strip()
         if rec_phone == phone_digits:
             chat_id = str(rec.get("Chat ID", "")).strip()
