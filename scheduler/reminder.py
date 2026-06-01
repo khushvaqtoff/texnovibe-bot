@@ -19,6 +19,13 @@ REMINDER_HOUR = int(os.getenv("REMINDER_HOUR", "9"))
 REMINDER_MINUTE = int(os.getenv("REMINDER_MINUTE", "0"))
 
 
+def safe_float(val):
+    try:
+        return float(str(val).replace(" ", "").replace(",", "").strip() or 0)
+    except:
+        return 0
+
+
 def format_money(amount) -> str:
     try:
         return f"{int(float(amount)):,}".replace(",", " ")
@@ -40,7 +47,7 @@ async def send_today_reminders(app: Application):
             )
             return
 
-        total = sum(float(r.get("To'lov Summasi", 0)) for r in today_list)
+        total = sum(safe_float(r.get("To'lov Summasi", 0)) for r in today_list)
         total_str = format_money(total)
         count = len(today_list)
 

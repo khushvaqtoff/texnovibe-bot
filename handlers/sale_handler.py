@@ -449,6 +449,49 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.edit_message_text(success_msg)
 
+        # Mijozga savdo haqida darhol xabar yuborish
+        try:
+            from sheets.google_sheets import get_client_chat_id
+            phone = context.user_data.get("phone", "")
+            client_chat_id = get_client_chat_id(phone)
+            if client_chat_id and str(client_chat_id).strip():
+                fio = context.user_data.get("fio", "")
+                product = context.user_data.get("product", "")
+                pay_type = context.user_data.get("payment_type", "Oylik")
+                period = context.user_data.get("installment_period", 0)
+                period_word = "oy" if pay_type == "Oylik" else "hafta"
+                pay_day = context.user_data.get("pay_day", 0)
+
+                if pay_type == "Oylik" and pay_day:
+                    tolov_kuni = f"Har oyning {pay_day}-si"
+                elif pay_type == "Haftalik" and pay_day:
+                    kunlar = {1:"Dushanba",2:"Seshanba",3:"Chorshanba",
+                              4:"Payshanba",5:"Juma",6:"Shanba",7:"Yakshanba"}
+                    tolov_kuni = "Har hafta " + kunlar.get(int(pay_day), str(pay_day))
+                else:
+                    tolov_kuni = result["next_payment"]
+
+                client_msg = (
+                    f"🎉 *Yangi nasiya rasmiylashtirildi!*\n\n"
+                    f"Hurmatli *{fio}!*\n\n"
+                    f"🛍 Tovar: *{product}*\n"
+                    f"💰 Jami qoldiq: *{format_money(result['remaining'])} so'm*\n"
+                    f"📅 To'lov turi: *{pay_type}*\n"
+                    f"🗓 Muddat: *{period} {period_word}*\n"
+                    f"💳 Har to'lov: *{format_money(result['payment_per_period'])} so'm*\n"
+                    f"🔔 To'lov kuni: *{tolov_kuni}*\n"
+                    f"📆 Birinchi to'lov: *{result['next_payment']}*\n\n"
+                    f"Xaridingiz uchun rahmat!\n"
+                    f"🏪 TexnoVibe"
+                )
+                await query.get_bot().send_message(
+                    chat_id=int(client_chat_id),
+                    text=client_msg,
+                    parse_mode="Markdown"
+                )
+        except Exception:
+            pass  # Mijoz bot bilan suhbat boshlamamagan bo'lishi mumkin
+
     except Exception as e:
         await query.edit_message_text(f"❌ Xatolik: {str(e)}\n\nQaytadan: /savdo")
 
