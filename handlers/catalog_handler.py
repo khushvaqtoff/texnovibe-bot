@@ -1,14 +1,17 @@
 """
 TexnoVibe — handlers/catalog_handler.py
-Katalog sahifasi — tovarlar va narxlar ro'yxati, inline sahifalash.
+Katalog sahifasi va Tovar qo'shish mantiqlari birlashtirilgan xavfsiz talqin.
 """
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import get_spreadsheet, ensure_worksheets
 import html
+import os
 
+# Konversiya holatlari
 CATALOG_MAIN, CATALOG_VIEW = range(40, 42)
+ADD_PROD_NAME, ADD_PROD_PRICE, ADD_PROD_CONFIRM = range(45, 48)
 
 
 def format_money(amount) -> str:
@@ -22,6 +25,10 @@ def escape_html(text) -> str:
     return html.escape(str(text)) if text else ""
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 1. KATALOGNI KO'RISH BO'LIMI
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 async def start_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Katalog bo'limini boshlash"""
     status_msg = await update.message.reply_text("⏳ Tovar katalogi yuklanmoqda...")
@@ -29,7 +36,7 @@ async def start_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         sh = get_spreadsheet()
         sheets = ensure_worksheets(sh)
-        ws = sheets["Tovarlar"]  # "Tovarlar" varog'i
+        ws = sheets["Tovarlar"]
         records = ws.get_all_records()
         
         if not records:
@@ -49,10 +56,10 @@ async def start_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def send_catalog_page(message, context: ContextTypes.DEFAULT_TYPE, edit=False):
-    """Katalogni sahifalab (pagination) ko'rsatish"""
+    """Katalogni inline sahifalab ko'rsatish"""
     items = context.user_data.get("catalog_items", [])
     page = context.user_data.get("catalog_page", 0)
-    per_page = 5  # Har bir sahifada 5 tadan tovar
+    per_page = 5
     
     start_idx = page * per_page
     end_idx = start_idx + per_page
@@ -69,13 +76,11 @@ async def send_catalog_page(message, context: ContextTypes.DEFAULT_TYPE, edit=Fa
         narxi = format_money(item.get("Narxi", 0))
         text += f"▪️ <b>{escape_html(tovar_nomi)}</b> — {narxi} so'm\n"
         
-        # Har bir tovar uchun alohida ko'rish tugmasi (ixtiyoriy)
         tovar_id = item.get("ID", tovar_nomi)
         keyboard.append([InlineKeyboardButton(f"🔎 {tovar_nomi}", callback_data=f"catview_{tovar_id}")])
         
     text += "\n━━━━━━━━━━━━━━━━━━━━"
     
-    # Sahifalash tugmalari (Orqaga / Oldinga)
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("⬅️ Orqaga", callback_data="catprev"))
@@ -96,7 +101,7 @@ async def send_catalog_page(message, context: ContextTypes.DEFAULT_TYPE, edit=Fa
 
 
 async def catalog_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sahifadan sahifaga o'tish hodisalarini boshqarish"""
+    """Sahifalash tugmalari bosilganda"""
     query = update.callback_query
     await query.answer()
     
@@ -118,3 +123,106 @@ async def catalog_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
         
     return CATALOG_MAIN
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 2. YANGI TOVAR QO'SHISH BO'LIMI (Import xatosini tuzatish)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Yangi tovar qo'shish jarayonini boshlash"""
+    context.user_data.clear()
+    await update.message.reply_text(
+        "➕ <b>Yangi tovar qo'shish</b>\n\n"
+        "Tovar nomini kiriting:",
+        parse_mode="HTML"
+    )
+    return ADD_PROD_NAME
+
+
+async def add_product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tovar nomini qabul qilish"""
+    name = update.message.text.strip()
+    context.user_data["new_prod_name"] = name
+    
+    await update.message.reply_text(
+        f"🛍 Tovar nomi: <b>{escape_html(name)}</b>\n\n"
+        "Endi ushbu tovarni narxini kiriting (faqat raqamlarda, masalan: 2500000):",
+        parse_mode="HTML"
+    )
+    return ADD_PROD_PRICE
+
+
+async def add_product_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tovar narxini qabul qilish va tasdiqlash so'rash"""
+    price_text = update.message.text.strip().replace(" ", "").replace(",", "")
+    
+    if not price_text.isdigit():
+        await update.message.reply_text("❌ Iltimos narxni faqat raqamlarda kiriting:")
+        return ADD_PROD_PRICE
+        
+    context.user_data["new_prod_price"] = int(price_text)
+    name = context.user_data.get("new_prod_name")
+    formatted_price = format_money(price_text)
+    
+    keyboard = [[
+        InlineKeyboardButton("✅ Saqlash", callback_data="save_prod"),
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="cancel_prod")
+    ]]
+    
+    await update.message.reply_text(
+        "📝 <b>Ma'lumotlarni tasdiqlang:</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"📦 Tovar: <b>{escape_html(name)}</b>\n"
+        f"💵 Narxi: <b>{formatted_price} so'm</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Google Sheets'ga saqlashni tasdiqlaysizmi?",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return ADD_PROD_CONFIRM
+
+
+async def add_product_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tasdiqlangandan so'ng Google Sheets'ga yozish"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "cancel_prod":
+        await query.edit_message_text("❌ Tovar qo'shish bekor qilindi.")
+        context.user_data.clear()
+        return ConversationHandler.END
+        
+    await query.edit_message_text("⏳ Ma'lumot jadvalga yozilmoqda...")
+    
+    try:
+        name = context.user_data.get("new_prod_name")
+        price = context.user_data.get("new_prod_price")
+        
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        ws = sheets["Tovarlar"]
+        
+        # Dinamik ID yaratish (qatorlar soniga qarab)
+        existing_rows = len(ws.get_all_values())
+        new_id = f"PRD-{str(existing_rows).zfill(3)}"
+        
+        # Google jadvalga yangi qator qo'shish [ID, Tovar Nomi, Narxi]
+        ws.append_row([new_id, name, price])
+        
+        await query.edit_message_text(
+            "✅ <b>TOVAR MUVAFFAQIYATLI QO'SHILDI</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 ID: <code>{new_id}</code>\n"
+            f"📦 Tovar: <b>{escape_html(name)}</b>\n"
+            f"💵 Narxi: <b>{format_money(price)} so'm</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "📊 Google Sheets muvaffaqiyatli yangilandi! 💾",
+            parse_mode="HTML"
+        )
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Sheets'ga yozishda xatolik: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
+        
+    context.user_data.clear()
+    return ConversationHandler.END
