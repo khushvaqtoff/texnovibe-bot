@@ -32,7 +32,7 @@ from handlers.auction_handler import (
     AUCTION_SETUP, AUCTION_BID
 )
 from handlers.admin_handler import cmd_export, cmd_backup, cmd_clients_db
-from handlers.report_handler import cmd_daily_report, cmd_warehouse
+from handlers.report_handler import cmd_daily_report, cmd_warehouse, cmd_excel_export
 from handlers.cancel_sale_handler import (
     start_cancel, cancel_search, cancel_confirm, cancel_cmd,
     CANCEL_SEARCH, CANCEL_CONFIRM
@@ -423,7 +423,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^⚠️ Qarzdorlar$"), cmd_debtors))
     app.add_handler(MessageHandler(filters.Regex("^🚫 Qora Ro'yxat$"), cmd_blacklist))
     app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
-    app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_export))
+    app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_excel_export))
 
     # === BOX MENYU HANDLERI ===
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
@@ -443,7 +443,7 @@ def main():
     app.add_handler(CommandHandler("mijozlar", cmd_clients))
     app.add_handler(CommandHandler("bugun", cmd_today))
     app.add_handler(CommandHandler("statistika", cmd_stats))
-    app.add_handler(CommandHandler("eksport", cmd_export))
+    app.add_handler(CommandHandler("eksport", cmd_excel_export))
     app.add_handler(CommandHandler("backup", cmd_backup))
     app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
     app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))

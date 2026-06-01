@@ -12,6 +12,13 @@ from sheets.google_sheets import (
 SEARCH_QUERY = 50
 
 
+def safe_float(val):
+    try:
+        return float(str(val).replace(" ", "").replace(",", "").strip() or 0)
+    except:
+        return 0
+
+
 def format_money(amount) -> str:
     try:
         return f"{int(float(amount)):,}".replace(",", " ")
@@ -94,7 +101,7 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"'{phone}' uchun tolov tarixi topilmadi.")
             return
 
-        total_paid = sum(float(r.get("To'lov Summasi", 0)) for r in history)
+        total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in history)
         last_remaining = history[-1].get("Qoldiq", 0) if history else 0
 
         text = f"TOLOV TARIXI\nTelefon: {phone}\n\n"
@@ -244,7 +251,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Bugun tolov qilishi kerak bolgan mijoz yoq.")
             return
 
-        total_expected = sum(float(r.get("To'lov Summasi", 0)) for r in today_payments)
+        total_expected = sum(safe_float(r.get("To'lov Summasi", 0)) for r in today_payments)
         text = (
             f"BUGUNGI TOLOVLAR ({len(today_payments)} ta)\n"
             f"Kutilayotgan: {format_money(total_expected)} som\n\n"
