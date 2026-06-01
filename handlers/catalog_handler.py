@@ -1,22 +1,14 @@
 """
-TexnoVibe — handlers/cancel_sale_handler.py
-Yangilik: Telefon bo'yicha qidirilganda bir preva faol savdo
-          bo'lsa — inline tugmalar bilan tovar tanlash qo'shildi.
-Tuzatish: f-string ichidagi backslash (\) va Markdown formatlash xatoliklari bartaraf etildi.
+TexnoVibe — handlers/catalog_handler.py
+Katalog sahifasi — tovarlar va narxlar ro'yxati, inline sahifalash.
 """
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import get_spreadsheet, ensure_worksheets
-from datetime import date
 import html
-import os
 
-# Konstantalar (Jadval ustunlari o'zgarsa, shu yerdan o'zgartirish oson)
-STATUS_COLUMN = 14       # N ustuni - Holat
-CANCEL_DATE_COLUMN = 17  # Q ustuni - Bekor qilingan sana
-
-CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM = range(30, 33)
+CATALOG_MAIN, CATALOG_VIEW = range(40, 42)
 
 
 def format_money(amount) -> str:
@@ -27,233 +19,102 @@ def format_money(amount) -> str:
 
 
 def escape_html(text) -> str:
-    """Telegram HTML formati buzilmasligi uchun maxsus belgilarni xavfsiz qiladi"""
     return html.escape(str(text)) if text else ""
 
 
-def find_active_sales(phone_or_id: str) -> list[tuple]:
-    """
-    Telefon yoki savdo ID bo'yicha BARCHA faol savdolarni topadi.
-    Qaytaradi: [(rec, row_index), ...]
-    """
-    sh = get_spreadsheet()
-    sheets = ensure_worksheets(sh)
-    ws = sheets["Savdolar"]
-    records = ws.get_all_records()
-
-    search = phone_or_id.strip().upper()
-    natija = []
-
-    for i, rec in enumerate(records, start=2):
-        # Savdo ID bo'yicha aniq qidirish
-        if str(rec.get("ID", "")).upper() == search:
-            if rec.get("Holat") == "Faol":
-                return [(rec, i)]  # ID topildi — bitta natija yetarli
-
-        # Telefon bo'yicha qidirish
-        phone_clean = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
-        search_clean = search.replace(" ", "").replace("-", "").replace("+", "")
-
-        if phone_clean == search_clean and rec.get("Holat") == "Faol":
-            natija.append((rec, i))
-
-    return natija
-
-
-def _sale_card_text(rec: dict) -> str:
-    """Bitta savdo ma'lumotlari matni (HTML formatida — Mutloq xavfsiz)"""
-    jami = format_money(rec.get("Jami Summa", 0))
-    qoldiq = format_money(rec.get("Qoldiq", 0))
-    avans = format_money(rec.get("Boshlang'ich To'lov", 0))
-
-    # SyntaxError'dan qochish uchun backslash bor kalitlarni f-string tashqarisida olamiz
-    to_lov_turi = rec.get("To'lov Turi") or rec.get("To\'lov Turi") or ""
-    keyingi_sana = rec.get("Keyingi To'lov Sanasi") or rec.get("Keyingi To\'lov Sanasi") or ""
-
-    return (
-        "🔍 <b>SAVDO TOPILDI</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🆔 ID: <code>{escape_html(rec.get('ID'))}</code>\n"
-        f"📅 Sana: {escape_html(rec.get('Sana'))}\n"
-        f"👤 Mijoz: <b>{escape_html(rec.get('FIO'))}</b>\n"
-        f"📞 Telefon: <code>{escape_html(rec.get('Telefon'))}</code>\n"
-        f"🛍 Tovar: <b>{escape_html(rec.get('Tovar'))}</b>\n"
-        f"💵 Jami: <b>{jami} so'm</b>\n"
-        f"💰 Avans: <b>{avans} so'm</b>\n"
-        f"📊 Qoldiq: <b>{qoldiq} so'm</b>\n"
-        f"💳 To'lov turi: <b>{escape_html(to_lov_turi)}</b>\n"
-        f"📅 Keyingi to'lov: {escape_html(keyingi_sana)}\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ Bu savdoni bekor qilmoqchimisiz?"
-    )
-
-
-# ─────────────────────────────────────────────
-# 1. BOSHLASH
-# ─────────────────────────────────────────────
-async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text(
-        "❌ <b>Savdoni Bekor Qilish</b>\n\n"
-        "Savdo ID yoki telefon raqamini kiriting:\n"
-        "<i>(Masalan: TXN-001 yoki +998901234567)</i>",
-        parse_mode="HTML"
-    )
-    return CANCEL_SEARCH
-
-
-# ─────────────────────────────────────────────
-# 2. QIDIRISH
-# ─────────────────────────────────────────────
-async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    search_text = update.message.text.strip()
-    status_msg = await update.message.reply_text("⏳ Qidirilmoqda...")
-
-    try:
-        natija = find_active_sales(search_text)
-
-        if not natija:
-            await status_msg.edit_text(
-                f"❌ <b>'{escape_html(search_text)}'</b> bo'yicha faol savdo topilmadi.\n\n"
-                "Savdo ID (TXN-001) yoki telefon raqamini to'g'ri kiriting.",
-                parse_mode="HTML"
-            )
-            return CANCEL_SEARCH
-
-        # ── Bitta savdo topilganda ─────────────────────────
-        if len(natija) == 1:
-            rec, row_index = natija[0]
-            context.user_data["cancel_row"] = row_index
-            context.user_data["cancel_rec"] = rec
-
-            keyboard = [[
-                InlineKeyboardButton("✅ Ha, bekor qilish", callback_data="do_cancel"),
-                InlineKeyboardButton("❌ Yo'q, saqlab qolish", callback_data="keep_sale")
-            ]]
-            await status_msg.delete()
-            await update.message.reply_text(
-                _sale_card_text(rec),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return CANCEL_CONFIRM
-
-        # ── Bir nechta savdo topilganda ────────────────────
-        context.user_data["cancel_natija"] = [
-            {"rec": r, "row_index": ri} for r, ri in natija
-        ]
-        fio = natija[0][0].get("FIO", "Mijoz")
-
-        keyboard = []
-        for r, ri in natija:
-            tovar = r.get("Tovar", "Tovar")
-            sale_id = r.get("ID", f"row-{ri}")
-            qoldiq = format_money(r.get("Qoldiq", 0))
-            sana = r.get("Sana", "")
-            label = f"🛍 {tovar} | Qoldiq: {qoldiq} so'm | {sana}"
-            keyboard.append([InlineKeyboardButton(label, callback_data=f"cnlsel_{sale_id}")])
-        
-        keyboard.append([InlineKeyboardButton("❌ Bekor qilish", callback_data="cnlsel_cancel")])
-
-        await status_msg.delete()
-        await update.message.reply_text(
-            f"👤 <b>{escape_html(fio)}</b> — {len(natija)} ta faol savdo topildi.\n\n"
-            "Qaysi savdoni bekor qilmoqchisiz?",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return CANCEL_SELECT
-
-    except Exception as e:
-        await update.message.reply_text(
-            f"❌ Xatolik yuz berdi: <code>{escape_html(str(e))}</code>",
-            parse_mode="HTML"
-        )
-        return ConversationHandler.END
-
-
-# ─────────────────────────────────────────────
-# 3. TOVAR TANLASH
-# ─────────────────────────────────────────────
-async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "cnlsel_cancel":
-        await query.edit_message_text("❌ Bekor qilish to'xtatildi.")
-        context.user_data.clear()
-        return ConversationHandler.END
-
-    sale_id = query.data.replace("cnlsel_", "")
-    natija = context.user_data.get("cancel_natija", [])
-
-    tanlangan = next(
-        (item for item in natija if str(item["rec"].get("ID", "")) == sale_id),
-        None
-    )
-
-    if not tanlangan:
-        await query.edit_message_text("❌ Savdo topilmadi yoki sessiya muddati tugadi.")
-        return ConversationHandler.END
-
-    context.user_data["cancel_row"] = tanlangan["row_index"]
-    context.user_data["cancel_rec"] = tanlangan["rec"]
-
-    keyboard = [[
-        InlineKeyboardButton("✅ Ha, bekor qilish", callback_data="do_cancel"),
-        InlineKeyboardButton("❌ Yo'q, saqlab qolish", callback_data="keep_sale")
-    ]]
+async def start_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Katalog bo'limini boshlash"""
+    status_msg = await update.message.reply_text("⏳ Tovar katalogi yuklanmoqda...")
     
-    await query.edit_message_text(
-        _sale_card_text(tanlangan["rec"]),
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return CANCEL_CONFIRM
-
-
-# ─────────────────────────────────────────────
-# 4. TASDIQLASH (Google Sheets'ga yozish)
-# ─────────────────────────────────────────────
-async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "keep_sale":
-        await query.edit_message_text("✅ Savdo saqlab qolindi. Hech narsa o'zgarmadi.")
-        context.user_data.clear()
-        return ConversationHandler.END
-
-    await query.edit_message_text("⏳ Google Sheets yangilanmoqda, kuting...")
-
     try:
-        rec = context.user_data.get("cancel_rec")
-        row_index = context.user_data.get("cancel_row")
-
         sh = get_spreadsheet()
         sheets = ensure_worksheets(sh)
-        ws = sheets["Savdolar"]
-
-        today = date.today().strftime("%d.%m.%Y")
+        ws = sheets["Tovarlar"]  # "Tovarlar" varog'i
+        records = ws.get_all_records()
         
-        # Ustunlarni yangilash
-        ws.update_cell(row_index, STATUS_COLUMN, "Bekor qilindi")
-        ws.update_cell(row_index, CANCEL_DATE_COLUMN, f"Bekor qilindi: {today}")
+        if not records:
+            await status_msg.edit_text("📭 Hozircha katalogda tovarlar mavjud emas.")
+            return ConversationHandler.END
+            
+        context.user_data["catalog_items"] = records
+        context.user_data["catalog_page"] = 0
+        
+        await status_msg.delete()
+        await send_catalog_page(update.message, context)
+        return CATALOG_MAIN
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Katalog yuklashda xatolik: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
+        return ConversationHandler.END
 
-        # Qatorni dizaynini o'zgartirish (Qizil rang + o'chirilgan tekst)
-        try:
-            row_range = f"A{row_index}:U{row_index}"
-            ws.format(row_range, {
-                "backgroundColor": {"red": 1.0, "green": 0.8, "blue": 0.8},
-                "textFormat": {"strikethrough": True}
-            })
-        except Exception:
-            pass
 
-        fio = rec.get("FIO", "")
-        tovar = rec.get("Tovar", "")
-        sid = rec.get("ID", "")
-        jami = format_money(rec.get("Jami Summa", 0))
-        qoldiq = format_money(rec.get("Qoldiq", 0))
+async def send_catalog_page(message, context: ContextTypes.DEFAULT_TYPE, edit=False):
+    """Katalogni sahifalab (pagination) ko'rsatish"""
+    items = context.user_data.get("catalog_items", [])
+    page = context.user_data.get("catalog_page", 0)
+    per_page = 5  # Har bir sahifada 5 tadan tovar
+    
+    start_idx = page * per_page
+    end_idx = start_idx + per_page
+    page_items = items[start_idx:end_idx]
+    
+    total_pages = (len(items) + per_page - 1) // per_page
+    
+    text = f"🛍 <b>TexnoVibe — Tovar Katalogi</b> (Sahifa {page + 1}/{total_pages})\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    keyboard = []
+    for item in page_items:
+        tovar_nomi = item.get("Tovar Nomi", "Noma'lum tovar")
+        narxi = format_money(item.get("Narxi", 0))
+        text += f"▪️ <b>{escape_html(tovar_nomi)}</b> — {narxi} so'm\n"
+        
+        # Har bir tovar uchun alohida ko'rish tugmasi (ixtiyoriy)
+        tovar_id = item.get("ID", tovar_nomi)
+        keyboard.append([InlineKeyboardButton(f"🔎 {tovar_nomi}", callback_data=f"catview_{tovar_id}")])
+        
+    text += "\n━━━━━━━━━━━━━━━━━━━━"
+    
+    # Sahifalash tugmalari (Orqaga / Oldinga)
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("⬅️ Orqaga", callback_data="catprev"))
+    if end_idx < len(items):
+        nav_buttons.append(InlineKeyboardButton("Oldinga ➡️", callback_data="catnext"))
+        
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+        
+    keyboard.append([InlineKeyboardButton("❌ Katalogni yopish", callback_data="catclose")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if edit:
+        await message.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
+    else:
+        await message.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
 
-        await query.edit_message_text(
+
+async def catalog_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sahifadan sahifaga o'tish hodisalarini boshqarish"""
+    query = update.callback_query
+    await query.answer()
+    
+    page = context.user_data.get("catalog_page", 0)
+    
+    if query.data == "catnext":
+        context.user_data["catalog_page"] = page + 1
+        await send_catalog_page(query.message, context, edit=True)
+        return CATALOG_MAIN
+        
+    elif query.data == "catprev":
+        context.user_data["catalog_page"] = page - 1
+        await send_catalog_page(query.message, context, edit=True)
+        return CATALOG_MAIN
+        
+    elif query.data == "catclose":
+        await query.edit_message_text("🏠 Katalog yopildi.")
+        context.user_data.clear()
+        return ConversationHandler.END
+        
+    return CATALOG_MAIN
