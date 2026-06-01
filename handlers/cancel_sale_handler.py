@@ -70,7 +70,7 @@ def _sale_card_text(rec: dict) -> str:
         f"💵 Jami: *{jami} so'm*\n"
         f"💰 Avans: *{avans} so'm*\n"
         f"📊 Qoldiq: *{qoldiq} so'm*\n"
-        f"📅 To'lov turi: *{rec.get(\"To'lov Turi\", '')}*\n"
+        f"📅 To'lov turi: *{rec.get("To'lov Turi", '')}*\n"
         f"📅 Keyingi to'lov: {rec.get('Keyingi To\'lov Sanasi', '')}\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "⚠️ Bu savdoni bekor qilmoqchimisiz?"
