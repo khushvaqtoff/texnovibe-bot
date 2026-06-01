@@ -284,11 +284,31 @@ def update_client_db(ws_clients, sale_data):
 def check_duplicate(phone: str) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    records = sheets["Savdolar"].get_all_records(numericise_ignore=["all"])
-    phone_clean = str(phone).replace(" ", "").replace("-", "")
-    for rec in records:
-        if str(rec.get("Telefon", "")).replace(" ", "").replace("-", "") == phone_clean and rec.get("Holat") == "Faol":
-            return {"exists": True, "fio": rec.get("FIO"), "product": rec.get("Tovar"), "remaining": rec.get("Qoldiq")}
+    ws = sheets["Savdolar"]
+    all_values = ws.get_all_values()
+    if len(all_values) < 2:
+        return {"exists": False}
+    headers = all_values[0]
+    phone_clean = str(phone).replace(" ", "").replace("-", "").replace("+", "")
+    try:
+        tel_idx = headers.index("Telefon")
+        holat_idx = headers.index("Holat")
+        fio_idx = headers.index("FIO")
+        tovar_idx = headers.index("Tovar")
+        qoldiq_idx = headers.index("Qoldiq")
+    except ValueError:
+        return {"exists": False}
+    for row in all_values[1:]:
+        if len(row) <= max(tel_idx, holat_idx, fio_idx, tovar_idx, qoldiq_idx):
+            continue
+        row_phone = str(row[tel_idx]).replace(" ", "").replace("-", "").replace("+", "")
+        if row_phone == phone_clean and row[holat_idx] == "Faol":
+            return {
+                "exists": True,
+                "fio": row[fio_idx],
+                "product": row[tovar_idx],
+                "remaining": row[qoldiq_idx]
+            }
     return {"exists": False}
 
 
