@@ -1,6 +1,7 @@
 """
 TexnoVibe — handlers/cancel_sale_handler.py
 Savdoni bekor qilish va mijozga avtomatik eslatma/bildirishnoma yuborish moduli.
+Dinamik ustunlar filtri bilan to'g'rilangan variant.
 """
 
 import logging
@@ -25,7 +26,8 @@ async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
         "❌ <b>Savdoni bekor qilish paneli</b>\n\n"
-        "Bekor qilinishi kerak bo'lgan mijozning ismi yoki telefon raqamini kiriting:",
+        "Bekor qilinishi kerak bo'lgan mijozning ismi yoki telefon raqamini kiriting:\n"
+        "<i>(Masalan: +998901234567 yoki Xushvaqtov)</i>",
         parse_mode="HTML"
     )
     return CANCEL_SEARCH
@@ -43,14 +45,12 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         records = ws.get_all_records()
 
         found_sales = []
-        # Google Sheets'da qatorlar 1-indeksdan boshlanadi, get_all_records sarlavhani hisobga olib, 
-        # 1-ma'lumot qatorini 2-qator deb hisoblaydi.
+        # get_all_records sarlavhani hisobga olib, 1-ma'lumot qatorini jadvalda 2-qator deb hisoblaydi.
         for idx, r in enumerate(records, start=2):
-            mijoz_ismi = str(r.get("Mijoz", r.get("Ismi", ""))).strip().lower()
+            mijoz_ismi = str(r.get("Mijoz", r.get("Ismi", r.get("Mijoz Ismi", "")))).strip().lower()
             telefon = str(r.get("Telefon", r.get("Tel", ""))).strip().lower()
 
             if query_text in mijoz_ismi or query_text in telefon:
-                # Qator raqamini ham saqlab ketamiz
                 r["_row_index"] = idx
                 found_sales.append(r)
 
@@ -62,13 +62,14 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Inline tugmalarni shakllantiramiz
         keyboard = []
-        for s in found_sales[:10]: # Maksimal 10 ta natija ko'rsatamiz
+        for s in found_sales[:10]:
             nomi = s.get("Mijoz", s.get("Ismi", "Noma'lum"))
             tovar = s.get("Tovar", "Tovar")
+            savdo_id = s.get("ID", s.get("Savdo ID", ""))
             row_idx = s["_row_index"]
             
-            # Tugma matni: "Aliyev | Telefon (Qator: 5)"
-            btn_text = f"👤 {nomi} | 📦 {tovar}"
+            id_str = f" [{savdo_id}]" if savdo_id else ""
+            btn_text = f"👤 {nomi} | 📦 {tovar}{id_str}"
             keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"cnlsel_{row_idx}")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -86,11 +87,10 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin biror savdoni tanlaganda tasdiqlash so'rovi"""
+    """Admin biror savdoni tanlaganda tasdiqlash so'rovi (Dinamik xabarnoma)"""
     query = update.callback_query
     await query.answer()
 
-    # Callback_data dan qator indeksini ajratib olamiz
     row_idx = int(query.data.split("_")[1])
     context.user_data["selected_sale_index"] = row_idx
 
@@ -100,12 +100,27 @@ async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         row_data = ws.row_values(row_idx)
         headers = ws.row_values(1)
 
+        # Bo'sh kataklarni to'ldiramiz, uzunliklar mos kelishi uchun
+        while len(row_data) < len(headers):
+            row_data.append("")
+
+        sale_dict = dict(zip(headers, row_data))
+
         # Ma'lumotlarni chiroyli ko'rinishga keltiramiz
         details = "📝 <b>O'chirilayotgan savdo ma'lumotlari:</b>\n\n"
-        for h, v in zip(headers, row_data):
-            if h in ["Mijoz", "Telefon", "Tovar", "Jami", "Holat"]:
-                val = format_money(v) if h == "Jami" else v
-                details += f"▪️ <b>{h}:</b> {val}\n"
+        
+        savdo_id = sale_dict.get("ID", sale_dict.get("Savdo ID", "—"))
+        mijoz_ismi = sale_dict.get("Mijoz", sale_dict.get("Ismi", "—"))
+        tovar_nomi = sale_dict.get("Tovar", "—")
+        jami = format_money(sale_dict.get("Jami", sale_dict.get("Narxi", "0")))
+        qoldiq = format_money(sale_dict.get("Qoldiq", "0"))
+
+        details += f"🆔 <b>ID:</b> {savdo_id}\n"
+        details += f"👤 <b>Mijoz:</b> {mijoz_ismi}\n"
+        details += f"📦 <b>Tovar:</b> {tovar_nomi}\n"
+        details += f"💰 <b>Jami:</b> {jami} so'm\n"
+        if qoldiq != "0":
+            details += f"💵 <b>Qoldiq:</b> {qoldiq} so'm\n"
 
         keyboard = [
             [
@@ -143,34 +158,40 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sh = get_spreadsheet()
         ws = sh.worksheet("Savdolar")
         
-        # O'chirishdan oldin mijozga xabar yuborish uchun qatorni o'qiymiz
         row_data = ws.row_values(sale_index)
         headers = ws.row_values(1)
         
-        # Ma'lumotlarni lug'at (dict) ko'rinishiga o'tkazamiz
+        while len(row_data) < len(headers):
+            row_data.append("")
+            
         sale_dict = dict(zip(headers, row_data))
 
+        savdo_id = sale_dict.get("ID", sale_dict.get("Savdo ID", ""))
         mijoz_ismi = sale_dict.get("Mijoz", sale_dict.get("Ismi", "Mijoz"))
         tovar_nomi = sale_dict.get("Tovar", "Tovar")
         
-        # Jadvalingizdan Mijoz Telegram ID (Chat ID) sini qidiramiz
-        mijoz_chat_id = sale_dict.get("Chat ID", sale_dict.get("chat_id", sale_dict.get("Telegram ID", None)))
+        # Jadvalingizdan Telegram ID yoki Chat ID ustunini o'qiymiz
+        mijoz_chat_id = sale_dict.get("Chat ID", sale_dict.get("chat_id", sale_dict.get("Telegram ID", sale_dict.get("Mijoz ID", None))))
 
-        # Agar topilmasa, qatordagi elementlar ichidan katta raqamli ID ni avtomatik izlaymiz
+        # Agar sarlavha orqali topilmasa, qatordagi elementlar ichidan katta raqamli ID ni avtomatik izlaymiz
         if not mijoz_chat_id:
             for val in row_data:
-                if str(val).isdigit() and len(str(val)) >= 8:
+                if str(val).isdigit() and len(str(val)) >= 8 and not str(val).startswith("998"):
                     mijoz_chat_id = int(val)
                     break
 
         # 1. Google Sheets'dan qatorni butunlay o'chiramiz
         ws.delete_rows(sale_index)
         
-        # 2. Adminga hisobot
+        # 2. Adminga chiroyli yakuniy hisobot (Xuddi avvalgidek toza holatda!)
+        id_text = f"<b>ID:</b> {savdo_id}\n" if savdo_id else ""
         await query.edit_message_text(
-            f"✅ <b>Savdo muvaffaqiyatli bekor qilindi va o'chirildi!</b>\n\n"
-            f"👤 Mijoz: {mijoz_ismi}\n"
-            f"📦 Tovar: {tovar_nomi}",
+            f"✅ <b>SAVDO BEKOR QILINDI</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{id_text}"
+            f"👤 <b>Mijoz:</b> {mijoz_ismi}\n"
+            f"📦 <b>Tovar:</b> {tovar_nomi}\n\n"
+            f"📊 Google Sheets muvaffaqiyatli yangilandi! ✅",
             parse_mode="HTML"
         )
         
@@ -183,18 +204,18 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"⚠️ <b>Hurmatli {mijoz_ismi}!</b>\n\n"
                         f"Sizning 📦 <b>{tovar_nomi}</b> uchun rasmiylashtirilgan "
                         f"nasiya savdoingiz shartnoma shartlariga ko'ra yoki "
-                        f"kelishuv asosida hamjamiyatimizda <b>BEKOR QILINDI</b>.\n\n"
+                        f"kelishuv asosida tizimda <b>BEKOR QILINDI</b>.\n\n"
                         f"ℹ️ Savollar yoki tushunmovchiliklar bo'lsa, ma'muriyatga murojaat qiling."
                     ),
                     parse_mode="HTML"
                 )
-                logger.info(f"Mijozga ({mijoz_chat_id}) bekor qilish xabari muvaffaqiyatli ketdi.")
+                logger.info(f"Mijozga ({mijoz_chat_id}) bekor qilish xabari yuborildi.")
             except Exception as bot_err:
                 logger.error(f"Mijoz botni block qilgan yoki ID xato: {bot_err}")
-                await query.message.reply_text("ℹ️ <i>Eslatma: Mijoz botni block qilgani sababli unga xabar yetib bormadi.</i>", parse_mode="HTML")
+                await query.message.reply_text("ℹ *Eslatma:* Mijoz botni block qilgani (yoki start bosmagani) sababli unga xabar yetib bormadi.", parse_mode="HTML")
         else:
             logger.warning("Ushbu savdo qatorida mijozning Telegram Chat ID si topilmadi.")
-            await query.message.reply_text("ℹ️ <i>Eslatma: Jadvalda mijozning Telegram ID-si topilmadi, shu sababli unga eslatma yuborilmadi.</i>", parse_mode="HTML")
+            await query.message.reply_text("ℹ *Eslatma:* Jadvalda mijozning Telegram Chat ID si topilmadi, shu sababli unga eslatma yuborilmadi.", parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Bekor qilishni tasdiqlashda xatolik: {e}")
@@ -204,6 +225,6 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Har qanday holatda bekor qilish bosilganda jarayonni to'xtatish"""
+    """Jarayonni to'xtatish"""
     await update.message.reply_text("🔄 Savdoni bekor qilish paneli yopildi.")
     return ConversationHandler.END
