@@ -3,14 +3,11 @@ Google Sheets — OAuth2 autentifikatsiya
 Railway uchun TOKEN_PICKLE_BASE64 environment variable dan o'qiydi
 """
 
-import os
-import pickle
-import base64
-import gspread
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from datetime import datetime, date, timedelta
-from dotenv import load_dotenv
+from handlers.client_panel import (
+    cmd_mening_malumotlarim, start_register, 
+    register_phone, cancel_register
+)
+from handlers.search_handler import start_search, SEARCH_QUERY, search_query
 
 load_dotenv()
 
@@ -431,12 +428,13 @@ def get_overdue_payments(days: int = 3) -> list:
 def get_payment_history(phone: str) -> list:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    phone_clean = str(phone).replace(" ", "")
+    # normalize_phone funksiyasi faylingizda bor, shundan foydalanamiz
+    phone_clean = normalize_phone(phone) 
+    
     return [
         r for r in ws_to_records(sheets["Tolovlar"])
-        if str(r.get("Telefon", "")).replace(" ", "") == phone_clean
+        if normalize_phone(r.get("Telefon", "")) == phone_clean
     ]
-
 
 def get_all_clients_with_status() -> list:
     sh = get_spreadsheet()
