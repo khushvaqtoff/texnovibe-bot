@@ -12,17 +12,22 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
+from sheets.google_sheets import normalize_phone
 
 load_dotenv()
+
+def normalize_phone(phone: str) -> str:
+    """
+    Telefon raqamidan ortiqcha belgilarni (plyus, probel, tire) olib tashlaydi.
+    Masalan: "+998 90 123-45-67" -> "998901234567"
+    """
+    cleaned = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
+    return cleaned
 
 # Logger sozlamasi
 logger = logging.getLogger(__name__)
 
 import gspread
-
-def normalize_phone(phone: str) -> str:
-    """Telefon raqamini tozalash funksiyasi"""
-    return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
 # qolgan kodlar...
 

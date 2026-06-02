@@ -5,7 +5,6 @@ Savdo kiritish handleri
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import add_sale, check_duplicate, normalize_phone
-
 import os
 
 NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
