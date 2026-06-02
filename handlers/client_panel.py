@@ -1,6 +1,7 @@
 """
 TexnoVibe — Mijoz paneli
-Kassa varag'idan eng yangi to'lovlarni jonli (real-time) o'qib, sanasi bilan ko'rsatuvchi mukammal variant.
+Bekor qilingan savdolarning to'lovlarini hisobga olmaydigan, faqat faol savdo ID-lariga 
+tegishli to'lovlarni sanasi bilan ko'rsatuvchi mukammal variant.
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -193,15 +194,25 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
         sale_records = ws_to_records(ws_sales)
         phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+        
         active_sales = []
+        allowed_sale_ids = set() # Faqat bekor qilinmagan savdolarning ID raqamlarini saqlash uchun to'plam
 
+        # 1. Savdolarni tekshiramiz va bekor bo'lmaganlarning ID larini yig'amiz
         for rec in sale_records:
             rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
             if rec_phone == phone_clean:
                 holat = str(rec.get("Holat", "")).strip().lower()
                 if "bekor" in holat:
-                    continue
+                    continue # Bekor bo'lgan shartnomani tashlab ketamiz
+                
                 active_sales.append(rec)
+                
+                # Savdo ID'sini aniqlaymiz va allowed_sale_ids ga qo'shamiz
+                id_key = find_dynamic_key(rec, ["id", "savdo id", "txn"]) or "ID"
+                s_id = str(rec.get(id_key, "")).strip()
+                if s_id:
+                    allowed_sale_ids.add(s_id)
 
         if not active_sales:
             await status_msg.edit_text(
@@ -239,11 +250,10 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 f"━━━━━━━━━━━━━━━━━━━━\n"
             )
 
-        # 🚀 JONLI (REAL-TIME) TO'LOVLAR TARIXINI O'QISH QISMI
+        # 🚀 TO'LOVLAR TARIXINI TO'G'RI (SAVDO ID BILAN) FILTRLAB CHIQARISH QISMI
         text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
         
         try:
-            # "Kassa" yoki "To'lovlar" varag'ini jonli yuklaymiz (keshni chetlab o'tish uchun)
             try:
                 ws_kassa = sh.worksheet("Kassa")
             except:
@@ -253,15 +263,22 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             client_history = []
             
             if kassa_records:
-                # Dinamik ustun sarlavhalarini aniqlaymiz
                 sample_k = kassa_records[0]
                 k_phone_key = find_dynamic_key(sample_k, ["tel", "telefon", "nomer"]) or "Telefon"
                 k_val_key = find_dynamic_key(sample_k, ["summa", "to'lov summasi", "tolov summasi", "miqdor", "berdi"]) or "To'lov Summasi"
                 k_date_key = find_dynamic_key(sample_k, ["sana", "to'lov sanasi", "tolov sanasi", "vaqt"]) or "To'lov Sanasi"
+                k_id_key = find_dynamic_key(sample_k, ["id", "savdo id", "shartnoma"]) or "Savdo ID"
                 
                 for r in kassa_records:
                     k_phone = str(r.get(k_phone_key, "")).replace("+", "").replace(" ", "").replace("-", "")
+                    k_sale_id = str(r.get(k_id_key, "")).strip()
+                    
+                    # 🛑 CRITICAL CHECK: Telefon to'g'ri kelsa VA ushbu to'lov BEKOR BO'LMAGAN Savdo ID ga tegishli bo'lsagina ro'yxatga qo'shamiz!
                     if k_phone == phone_clean:
+                        # Agar jadvalda Savdo ID yozilgan bo'lsa va u faol ID larning ichida bo'lmasa — o'tkazib yuboramiz!
+                        if k_sale_id and allowed_sale_ids and (k_sale_id not in allowed_sale_ids):
+                            continue
+                            
                         client_history.append({
                             "sana": r.get(k_date_key, ""),
                             "summa": safe_float(r.get(k_val_key, 0))
@@ -269,15 +286,13 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             
             if client_history:
                 total_paid = sum(item["summa"] for item in client_history)
-                # Eng oxirgi to'langanlarini tepaga yoki tartib bilan chiqarish uchun oxirgi 5 tasini olamiz
                 for item in client_history[-5:]:
                     text += f"• {item['sana']} — *{format_money(item['summa'])} so'm*\n"
                 text += f"\n✅ Jami tolangan: *{format_money(total_paid)} so'm*\n"
             else:
-                text += "• Hozircha to'lovlar tarixi mavjud emas.\n\n✅ Jami tolangan: *0 so'm*\n"
+                text += "• Hozircha amaldagi shartnomalar uchun to'lovlar mavjud emas.\n\n✅ Jami tolangan: *0 so'm*\n"
                 
         except Exception as history_err:
-            # Agar Kassa varag'ini o'qishda kutilmagan xato bo'lsa, zaxira sifatida eski funksiyani chaqiradi
             text += "• To'lovlar tarixi yuklanmoqda...\n"
             from sheets.google_sheets import get_payment_history
             history = get_payment_history(phone)
@@ -297,14 +312,4 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         await status_msg.delete()
         await update.message.reply_text(
             text,
-            parse_mode="Markdown",
-            reply_markup=get_client_keyboard()
-        )
-
-    except Exception as e:
-        if 'status_msg' in locals():
-            await status_msg.delete()
-        await update.message.reply_text(
-            f"❌ Xatolik: `{str(e)}`",
-            parse_mode="Markdown"
-        )
+            parse
