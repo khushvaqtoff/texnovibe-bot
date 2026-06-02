@@ -47,9 +47,9 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = update.message.text.strip()
-    # Eski qatorni o'chirib, yangisini qo'ying:
+    # Endi quyidagi qator ishlaydi:
     clean_phone = normalize_phone(phone) 
-    
+
     if not clean_phone.isdigit() or len(clean_phone) < 9:
         await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting:")
         return PHONE
