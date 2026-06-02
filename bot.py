@@ -65,7 +65,7 @@ from handlers.order_handler import (
 )
 
 # === YANGI: QIDIRUV PANELI HANDLERLARI ===
-from handlers.search_handler import start_search, search_query, SEARCH_QUERY
+from handlers.search_handler import start_search, SEARCH_QUERY
 
 # === SCHEDULER ===
 from scheduler.reminder import setup_scheduler
