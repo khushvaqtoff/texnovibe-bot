@@ -61,7 +61,7 @@ CLIENT_HEADERS = [
 def get_sheets_client():
     # credentials.json fayli asosiy papkada bo'lishi shart
     return gspread.service_account(filename='credentials.json')
-	clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
+	clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END 	CERTIFICATE-----","").replace("\r\n", "").replace("\n", "").replace(" ", "")
 	token_bytes = base64.b64decode(clean)
 	creds = pickle.loads(token_bytes)
 except Exception as e:
