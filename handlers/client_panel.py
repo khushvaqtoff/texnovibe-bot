@@ -1,6 +1,3 @@
-"""
-TexnoVibe Nasiya Bot — Mijoz paneli (To'liq tuzatilgan)
-"""
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
@@ -26,9 +23,9 @@ def get_client_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# Asosiy funksiyalar
+# BOT IMPORT QILADIGAN FUNKSIYALAR
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 Telefon raqamingizni kiriting:", parse_mode="Markdown")
+    await update.message.reply_text("📝 Telefon raqamingizni yozing:")
     return REGISTER_PHONE
 
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,7 +57,6 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         sale_records = ws_to_records(ws_sales)
         phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
         
-        # Bekor qilinganlarni filtrlab, faqat faollarini olish
         active_sales = [r for r in sale_records if str(r.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "") == phone_clean and "bekor" not in str(r.get("Holat", "")).lower()]
 
         if not active_sales:
@@ -83,4 +79,4 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
     except Exception as e:
-        await update.message.reply_text(f"❌ Xatolik yuz berdi: {e}")
+        await update.message.reply_text(f"❌ Xatolik: {e}")
