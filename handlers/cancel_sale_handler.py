@@ -1,7 +1,7 @@
 """
 TexnoVibe — handlers/cancel_sale_handler.py
 Savdoni bekor qilish paneli.
-Xatoliklarni aniq ko'rsatuvchi va Chat ID formatini to'g'rilovchi variant.
+Agar Savdolar jadvalida Chat ID bo'lmasa, uni Mijozlar varag'idan avtomatik qidiruvchi mukammal variant.
 """
 
 import logging
@@ -38,6 +38,20 @@ def find_column_index(headers, keys):
     return None
 
 
+def clean_telegram_id(raw_val):
+    """Telegram ID raqamini har xil formatlardan (float, string) tozalab qaytaradi"""
+    if not raw_val:
+        return None
+    try:
+        raw_str = str(raw_val).split('.')[0].strip()
+        if raw_str.isdigit() or (raw_str.startswith('-') and raw_str[1:].isdigit()):
+            if len(raw_str) >= 6:
+                return int(raw_str)
+    except Exception:
+        pass
+    return None
+
+
 async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin bekor qilish bo'limini boshlaganda"""
     context.user_data.clear()
@@ -71,10 +85,11 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_col = find_column_index(headers, ["chat", "telegram id", "mijoz id", "tg id", "user id", "chatid", "tg_id"]) or 3
         tovar_col = find_column_index(headers, ["tovar", "mahsulot", "buyum"]) or 5
         status_col = find_column_index(headers, ["holat", "status"]) or 14
+        phone_col = find_column_index(headers, ["tel", "telefon", "nomer"]) or 4
 
         context.user_data["cols"] = {
             "id": id_col, "name": name_col, "chat": chat_col, 
-            "tovar": tovar_col, "status": status_col
+            "tovar": tovar_col, "status": status_col, "phone": phone_col
         }
 
         found_sales = []
@@ -89,7 +104,8 @@ async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "row_index": idx,
                     "savdo_id": row[id_col - 1] if len(row) >= id_col else "",
                     "mijoz_ismi": row[name_col - 1] if len(row) >= name_col else "Noma'lum",
-                    "tovar": row[tovar_col - 1] if len(row) >= tovar_col else "Tovar"
+                    "tovar": row[tovar_col - 1] if len(row) >= tovar_col else "Tovar",
+                    "telefon": row[phone_col - 1] if len(row) >= phone_col else ""
                 })
 
         await status_msg.delete()
@@ -140,6 +156,7 @@ async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mijoz_ismi = row_data[cols["name"] - 1] if len(row_data) >= cols["name"] else "—"
         chat_id = row_data[cols["chat"] - 1] if len(row_data) >= cols["chat"] else ""
         tovar_nomi = row_data[cols["tovar"] - 1] if len(row_data) >= cols["tovar"] else "—"
+        telefon = row_data[cols["phone"] - 1] if len(row_data) >= cols["phone"] else ""
         
         headers = ws.row_values(1)
         price_col = find_column_index(headers, ["jami", "narxi", "summa"]) or 6
@@ -149,7 +166,8 @@ async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "savdo_id": savdo_id,
             "mijoz_ismi": mijoz_ismi,
             "chat_id": chat_id,
-            "tovar_nomi": tovar_nomi
+            "tovar_nomi": tovar_nomi,
+            "telefon": telefon
         }
 
         details = (
@@ -222,25 +240,42 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         savdo_id = sale_info.get("savdo_id", "")
         mijoz_ismi = sale_info.get("mijoz_ismi", "Mijoz")
         tovar_nomi = sale_info.get("tovar_nomi", "Tovar")
+        telefon_raqam = str(sale_info.get("telefon", "")).strip()
         
-        # Chat ID o'qish
+        # 1-Bosqich: Savdolar varag'idan Chat ID ni tekshiramiz
         mijoz_chat_id = sale_info.get("chat_id", "")
-        if not mijoz_chat_id:
-            chat_col_idx = cols.get("chat") or 3
-            if len(row_values) >= chat_col_idx:
-                mijoz_chat_id = row_values[chat_col_idx - 1]
-        
-        # Formatni tozalash (agar nuqtali yoki float formatda yozilib qolgan bo'lsa)
-        clean_chat_id = None
-        if mijoz_chat_id:
-            try:
-                # Agar string oxirida .0 bo'lsa (masalan '1234567.0') olib tashlaymiz
-                raw_str = str(mijoz_chat_id).split('.')[0].strip()
-                if raw_str.isdigit() or (raw_str.startswith('-') and raw_str[1:].isdigit()):
-                    clean_chat_id = int(raw_str)
-            except Exception:
-                pass
+        if not mijoz_chat_id and len(row_values) >= cols.get("chat", 3):
+            mijoz_chat_id = row_values[cols.get("chat") - 1]
+            
+        clean_chat_id = clean_telegram_id(mijoz_chat_id)
 
+        # 2-Bosqich: AGAR SAVDOLARDA TOPILMASA, MIJOZLAR VARAG'IDAN QIDIRAMIZ 🚀
+        if not clean_chat_id:
+            try:
+                m_ws = sh.worksheet("Mijozlar")
+                m_rows = m_ws.get_all_values()
+                if m_rows:
+                    m_headers = m_rows[0]
+                    m_chat_idx = find_column_index(m_headers, ["chat", "telegram id", "tg id", "user id", "chatid"]) or 2
+                    m_phone_idx = find_column_index(m_headers, ["tel", "telefon", "nomer"]) or 3
+                    m_name_idx = find_column_index(m_headers, ["mijoz", "ism", "fio"]) or 1
+                    
+                    # Telefon yoki Ism bo'yicha mijozlar bazasidan Chat ID qidiramiz
+                    for m_row in m_rows[1:]:
+                        m_phone = str(m_row[m_phone_idx - 1]).strip() if len(m_row) >= m_phone_idx else ""
+                        m_name = str(m_row[m_name_idx - 1]).strip().lower() if len(m_row) >= m_name_idx else ""
+                        
+                        # Telefon mos kelsa yoki Ism 100% bir xil bo'lsa
+                        if (telefon_raqam and telefon_raqam in m_phone) or (mijoz_ismi.lower() in m_name and len(mijoz_ismi) > 3):
+                            found_id = m_row[m_chat_idx - 1] if len(m_row) >= m_chat_idx else None
+                            clean_chat_id = clean_telegram_id(found_id)
+                            if clean_chat_id:
+                                logger.info(f"Chat ID 'Mijozlar' varag'idan topildi: {clean_chat_id}")
+                                break
+            except Exception as sheet_err:
+                logger.error(f"Mijozlar varag'idan qidirishda xatolik: {sheet_err}")
+
+        # Adminga natija xabari
         id_text = f"<b>ID:</b> {escape_html(savdo_id)}\n" if savdo_id else ""
         await query.edit_message_text(
             f"✅ <b>SAVDO BEKOR QILINDI</b>\n"
@@ -252,7 +287,7 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
         
-        # 3. MIJOZNING SHAXSIY TELEGRAMIGA ESLATMA YUBORISH
+        # Mijozga shaxsiy xabar yuborish
         if clean_chat_id:
             try:
                 await context.bot.send_message(
@@ -266,16 +301,15 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ),
                     parse_mode="HTML"
                 )
-                logger.info(f"Mijozga ({clean_chat_id}) bekor qilish eslatmasi yuborildi.")
+                logger.info(f"Mijozga ({clean_chat_id}) bekor qilish eslatmasi muvaffaqiyatli ketdi.")
             except Exception as bot_err:
-                logger.error(f"Mijozga yuborishda aniq xatolik: {bot_err}")
-                # Real xatolik matnini adminga ko'rsatamiz:
+                logger.error(f"Mijozga yuborishda xatolik: {bot_err}")
                 await query.message.reply_text(
-                    f"ℹ️ <i>Eslatma ketmadi. Telegram xatolik matni:</i> <code>{escape_html(str(bot_err))}</code>", 
+                    f"ℹ️ <i>Eslatma yuborishda xatolik:</i> <code>{escape_html(str(bot_err))}</code>", 
                     parse_mode="HTML"
                 )
         else:
-            await query.message.reply_text("ℹ️ <i>Jadvalda o'qilgan Chat ID noto'g'ri formatda yoki bo'sh, eslatma yuborilmadi.</i>", parse_mode="HTML")
+            await query.message.reply_text("ℹ️ <i>Chat ID bazalardan (Savdolar va Mijozlar varag'idan) topilmadi, eslatma yuborilmadi.</i>", parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Tasdiqlashda xatolik: {e}")
