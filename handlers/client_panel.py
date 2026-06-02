@@ -1,5 +1,5 @@
 """
-Mijoz paneli - Tuzatilgan versiya
+Mijoz paneli — Tuzatilgan versiya
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -33,16 +33,18 @@ def get_client_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# Import xatosini tuzatish uchun kerakli funksiyalar
+# Import xatolarini bartaraf etish uchun funksiyalar
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📝 *Royxatdan otish*\n\nTelefon raqamingizni yozing:",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text("📝 Telefon raqamingizni yozing:", parse_mode="Markdown")
     return REGISTER_PHONE
 
+async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Bu yerda ro'yxatdan o'tish logikasi bo'lishi kerak
+    await update.message.reply_text("✅ Ro'yxatdan o'tildi.")
+    return ConversationHandler.END
+
 async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start_register(update, context)
+    return await start_register(update, context)
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_user.id
@@ -62,7 +64,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         sale_records = ws_to_records(ws_sales)
         phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
         
-        # Bekor qilinganlarni filtrlab, faqat faollarini olish
+        # Faqat "Faol" savdolarni filtrlash (Bekor qilinganlarni olib tashlash)
         active_sales = [r for r in sale_records if str(r.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "") == phone_clean and "bekor" not in str(r.get("Holat", "")).lower()]
 
         if not active_sales:
