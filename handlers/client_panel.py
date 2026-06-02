@@ -4,6 +4,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def format_money(val):
+    return f"{float(val):,.0f}".replace(",", " ")
+
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📞 Telefon raqamingizni yuboring:")
     return 1
@@ -12,7 +15,27 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Ro'yxatdan o'tildi.")
     return ConversationHandler.END
 
+async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Bekor qilindi.")
+    return ConversationHandler.END
+
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Importni funksiya ichiga o'tkazdik
+    from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records, get_payment_history
+    
+    chat_id = update.effective_user.id
+    try:
+        sh = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        client = next((r for r in ws_to_records(sheets["Mijozlar"]) if str(r.get("Chat ID", "")) == str(chat_id)), None)
+        
+        if not client:
+            await update.message.reply_text("❌ Siz hali ro'yxatdan o'tmagansiz!")
+            return
+        
+        phone = str(client.get("Telefon", ""))
+        history = get_payment_history(phone)
+
     # IMPORTNI FUNKSIYA ICHIGA QO'YDIK
     from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records, get_payment_history
     
@@ -100,7 +123,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
     except Exception as e:
         logger.error(f"Xatolik: {e}")
-       await update.message.reply_text("✅ Ma'lumotlaringiz yuklandi.")
+      await update.message.reply_text("✅ Ma'lumotlaringiz yuklandi.")
     except Exception as e:
         logger.error(f"Xatolik: {e}")
         await update.message.reply_text("❌ Xatolik yuz berdi.")

@@ -434,15 +434,15 @@ def get_overdue_payments(days: int = 3) -> list:
 
 
 def get_payment_history(phone: str) -> list:
-    # IMPORTNI FUNKSIYA ICHIGA QO'YDIK (Aylanma import yechildi)
+    # Aylanma importni oldini olish uchun importni funksiya ichiga o'tkazdik
     from handlers.client_panel import ws_to_records 
     
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
-    phone_clean = str(phone).replace(" ", "")
+    phone_clean = str(phone).replace(" ", "").replace("+", "")
     return [
         r for r in ws_to_records(sheets["Tolovlar"])
-        if str(r.get("Telefon", "")).replace(" ", "") == phone_clean
+        if str(r.get("Telefon", "")).replace(" ", "").replace("+", "") == phone_clean
     ]
 
 def get_all_clients_with_status() -> list:
