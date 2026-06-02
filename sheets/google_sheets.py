@@ -12,18 +12,19 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
-from utils import normalize_phone
 
 load_dotenv()
 
 # Logger sozlamasi
 logger = logging.getLogger(__name__)
 
-# sheets/google_sheets.py
+import gspread
 
 def normalize_phone(phone: str) -> str:
     """Telefon raqamini tozalash funksiyasi"""
     return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
+
+# qolgan kodlar...
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
