@@ -1,7 +1,6 @@
 """
 TexnoVibe Nasiya Bot — Asosiy fayl
 Admin va Mijoz uchun alohida keyboard menyu
-Tuzatilgan variant: Payment Conversation xatoligi butunlay bartaraf etildi.
 """
 
 import logging
@@ -9,11 +8,9 @@ import os
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ConversationHandler, filters, ContextTypes
+    CallbackQueryHandler, ConversationHandler, filters
 )
 from dotenv import load_dotenv
-
-# === SAVDO HANDLERLARI ===
 from handlers.sale_handler import (
     start_sale, get_name, get_phone, get_product,
     get_total_price, get_payment_type, get_installment_period,
@@ -21,52 +18,39 @@ from handlers.sale_handler import (
     NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
     INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, CONFIRM
 )
-
-# === TO'LOV HANDLERLARI ===
 from handlers.payment_handler import (
-    start_payment, payment_phone, payment_select, payment_amount, payment_confirm,
-    PAY_PHONE, PAY_SELECT, PAY_AMOUNT, PAY_CONFIRM
+    start_payment, payment_phone, payment_amount, payment_confirm,
+    PAY_PHONE, PAY_AMOUNT, PAY_CONFIRM
 )
-
-# === AUKSION HANDLERLARI ===
+from handlers.query_handler import (
+    cmd_history, cmd_search, cmd_debtors, cmd_blacklist,
+    cmd_rating, cmd_clients, cmd_today, cmd_stats,
+    start_search, search_query, SEARCH_QUERY
+)
 from handlers.auction_handler import (
     start_auction, auction_bid, auction_end_cmd,
     AUCTION_SETUP, AUCTION_BID
 )
-
-# === ADMIN VA REPORT HANDLERLARI ===
 from handlers.admin_handler import cmd_export, cmd_backup, cmd_clients_db
 from handlers.report_handler import cmd_daily_report, cmd_warehouse, cmd_excel_export
-
-# === SAVDONI BEKOR QILISH HANDLERLARI ===
 from handlers.cancel_sale_handler import (
-    start_cancel, cancel_search, cancel_select, cancel_confirm, cancel_cmd,
-    CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM
+    start_cancel, cancel_search, cancel_confirm, cancel_cmd,
+    CANCEL_SEARCH, CANCEL_CONFIRM
 )
-
-# === MIJOZ PANEL HANDLERLARI ===
 from handlers.client_panel import (
-    cmd_mening_malumotlarim, start_register, 
-    register_phone, cancel_register, REGISTER_PHONE
+    cmd_mening_malumotlarim, cmd_register,
+    start_register, register_phone, cancel_register,
+    REGISTER_PHONE
 )
-
-# === KATALOG HANDLERLARI ===
 from handlers.catalog_handler import (
     start_add_product, cat_get_name, cat_get_price,
     cat_get_desc, cat_confirm, cmd_catalog, cmd_remove_product,
     CAT_NAME, CAT_PRICE, CAT_DESC, CAT_CONFIRM
 )
-
-# === BUYURTMA HANDLERLARI ===
 from handlers.order_handler import (
     start_order, order_select, order_workplace, order_confirm, cancel_order,
     cmd_orders, ORDER_SELECT, ORDER_WORKPLACE, ORDER_CONFIRM
 )
-
-# === YANGI: QIDIRUV PANELI HANDLERLARI ===
-from handlers.search_handler import start_search, SEARCH_QUERY, search_query
-
-# === SCHEDULER ===
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -79,32 +63,6 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
-
-
-# === ETISHMAYOTGAN BOSHQA SARIQLAR (DUMMY STUBS) ===
-async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📅 Bugungi to'lovlar ro'yxati tayyorlanmoqda...")
-
-async def cmd_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👥 Mijozlar ro'yxati yuklanmoqda...")
-
-async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 Statistika ma'lumotlari hisoblanmoqda...")
-
-async def cmd_debtors(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⚠️ Qarzdorlar ro'yxati shakllantirilmoqda...")
-
-async def cmd_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚫 Qora ro'yxat yuklanmoqda...")
-
-async def cmd_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⭐ Agentlar va mijozlar reytingi...")
-
-async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⏳ To'lovlar tarixi yuklanmoqda...")
-
-async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Qidiruv bo'limi. /qidir [ism/tel] ko'rinishida yozing.")
 
 
 def is_admin(user_id: int) -> bool:
@@ -140,6 +98,7 @@ def get_client_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
+# ✅ FIX 1: cmd_start main()dan OLDIN aniqlandi
 async def cmd_start(update: Update, context):
     user_id = update.effective_user.id
     if is_admin(user_id):
@@ -163,6 +122,19 @@ async def cmd_start(update: Update, context):
             parse_mode="Markdown",
             reply_markup=get_client_keyboard()
         )
+
+
+async def cmd_search_prompt(update: Update, context):
+    """Qidirish tugmasi bosilganda"""
+    await update.message.reply_text(
+        "🔍 *Qidirish*\n\n"
+        "Ism yoki telefon bo'yicha:\n"
+        "`/qidir Anvarov`\n"
+        "`/qidir +998901234567`\n\n"
+        "To'lov tarixi:\n"
+        "`/tarix +998901234567`",
+        parse_mode="Markdown"
+    )
 
 
 def main():
@@ -253,9 +225,6 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone),
             ],
-            PAY_SELECT: [
-                CallbackQueryHandler(payment_select, pattern="^paysel_"),
-            ],
             PAY_AMOUNT: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
@@ -287,9 +256,6 @@ def main():
                 MessageHandler(home_filter, cancel_cmd),
                 MessageHandler(bekor_filter, cancel_cmd),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search),
-            ],
-            CANCEL_SELECT: [
-                CallbackQueryHandler(cancel_select, pattern="^cnlsel_"),
             ],
             CANCEL_CONFIRM: [
                 MessageHandler(home_filter, cancel_cmd),
@@ -416,7 +382,7 @@ def main():
         conversation_timeout=300,
     )
 
-    # === JONLI QIDIRISH CONVERSATION ===
+    # === QIDIRISH CONVERSATION ===
     search_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^🔍 Qidirish$"), start_search),
@@ -448,7 +414,7 @@ def main():
     app.add_handler(auction_conv)
 
     # Start
-    app.add_handler(CommandHandler("register", start_register))
+    app.add_handler(CommandHandler("start", cmd_start))
 
     # === ADMIN TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📅 Bugungi To'lovlar$"), cmd_today))
@@ -465,7 +431,8 @@ def main():
     # === MIJOZ TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"), cmd_mening_malumotlarim))
 
-    app.add_handler(CommandHandler("register", start_register))
+    # ✅ FIX 3: cmd_register handler qo'shildi
+    app.add_handler(CommandHandler("register", cmd_register))
 
     # === BUYRUQLAR ===
     app.add_handler(CommandHandler("tarix", cmd_history))

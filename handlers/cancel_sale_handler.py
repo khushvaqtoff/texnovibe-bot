@@ -1,323 +1,230 @@
 """
-TexnoVibe — handlers/cancel_sale_handler.py
-Savdoni bekor qilish paneli.
-Agar Savdolar jadvalida Chat ID bo'lmasa, uni Mijozlar varag'idan avtomatik qidiruvchi mukammal variant.
+Savdoni bekor qilish handleri
+/bekorqilish buyrug'i
 """
 
-import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import get_spreadsheet, ensure_worksheets
 from datetime import date
-import html
 
-logger = logging.getLogger(__name__)
-
-# States
-CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM = range(3)
+CANCEL_SEARCH, CANCEL_CONFIRM = range(30, 32)
 
 
 def format_money(amount) -> str:
     try:
         return f"{int(float(amount)):,}".replace(",", " ")
-    except (ValueError, TypeError):
+    except:
         return str(amount)
 
 
-def escape_html(text) -> str:
-    return html.escape(str(text)) if text else ""
+def find_active_sale(phone_or_id: str) -> tuple:
+    """
+    Telefon yoki savdo ID bo'yicha faol savdoni topadi
+    Qaytaradi: (record, row_index) yoki (None, None)
+    """
+    sh = get_spreadsheet()
+    sheets = ensure_worksheets(sh)
+    ws = sheets["Savdolar"]
+    records = ws.get_all_records()
 
+    search = phone_or_id.strip().upper()
 
-def find_column_index(headers, keys):
-    """Sarlavhalar ichidan kalit so'zlarga mos keladigan ustun indeksini qaytaradi (1-boshlanadi)"""
-    for idx, h in enumerate(headers, start=1):
-        header_lower = str(h).strip().lower()
-        for key in keys:
-            if key in header_lower:
-                return idx
-    return None
+    for i, rec in enumerate(records, start=2):
+        # Savdo ID bo'yicha qidirish
+        if str(rec.get("ID", "")).upper() == search:
+            if rec.get("Holat") == "Faol":
+                return rec, i, ws
 
+        # Telefon bo'yicha qidirish
+        phone_clean = str(rec.get("Telefon", "")).replace(" ", "").replace("-", "")
+        search_clean = search.replace(" ", "").replace("-", "").replace("+", "")
+        phone_clean2 = phone_clean.replace("+", "")
 
-def clean_telegram_id(raw_val):
-    """Telegram ID raqamini har xil formatlardan (float, string) tozalab qaytaradi"""
-    if not raw_val:
-        return None
-    try:
-        raw_str = str(raw_val).split('.')[0].strip()
-        if raw_str.isdigit() or (raw_str.startswith('-') and raw_str[1:].isdigit()):
-            if len(raw_str) >= 6:
-                return int(raw_str)
-    except Exception:
-        pass
-    return None
+        if phone_clean2 == search_clean and rec.get("Holat") == "Faol":
+            return rec, i, ws
+
+    return None, None, None
 
 
 async def start_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin bekor qilish bo'limini boshlaganda"""
+    """/bekorqilish — Savdoni bekor qilish"""
     context.user_data.clear()
     await update.message.reply_text(
-        "❌ <b>Savdoni bekor qilish paneli</b>\n\n"
-        "Mijozning ismi yoki telefon raqamini kiriting:\n"
-        "<i>(Faqat faol savdolar qidiriladi)</i>",
-        parse_mode="HTML"
+        "❌ *Savdoni Bekor Qilish*\n\n"
+        "Savdo ID yoki telefon raqamini kiriting:\n"
+        "_(Masalan: TXN-001 yoki +998901234567)_",
+        parse_mode="Markdown"
     )
     return CANCEL_SEARCH
 
 
 async def cancel_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mijoz so'rovi bo'yicha qidirish"""
-    query_text = update.message.text.strip().lower()
-    status_msg = await update.message.reply_text("⏳ Savdolar ro'yxati tekshirilmoqda...")
+    """Savdoni qidiradi"""
+    search_text = update.message.text.strip()
+
+    await update.message.reply_text("⏳ Qidirilmoqda...")
 
     try:
-        sh = get_spreadsheet()
-        ws = sh.worksheet("Savdolar")
-        
-        all_rows = ws.get_all_values()
-        if not all_rows:
-            await status_msg.edit_text("📭 Jadval bo'sh.")
-            return ConversationHandler.END
+        rec, row_index, ws = find_active_sale(search_text)
 
-        headers = all_rows[0]
-        
-        id_col = find_column_index(headers, ["id", "savdo id", "txn"]) or 1
-        name_col = find_column_index(headers, ["mijoz", "ism", "fio", "f.i.o"]) or 2
-        chat_col = find_column_index(headers, ["chat", "telegram id", "mijoz id", "tg id", "user id", "chatid", "tg_id"]) or 3
-        tovar_col = find_column_index(headers, ["tovar", "mahsulot", "buyum"]) or 5
-        status_col = find_column_index(headers, ["holat", "status"]) or 14
-        phone_col = find_column_index(headers, ["tel", "telefon", "nomer"]) or 4
+        if not rec:
+            await update.message.reply_text(
+                f"❌ *'{search_text}'* bo'yicha faol savdo topilmadi.\n\n"
+                "Savdo ID (TXN-001) yoki telefon raqamini to'g'ri kiriting.",
+                parse_mode="Markdown"
+            )
+            return CANCEL_SEARCH
 
-        context.user_data["cols"] = {
-            "id": id_col, "name": name_col, "chat": chat_col, 
-            "tovar": tovar_col, "status": status_col, "phone": phone_col
-        }
+        # Topilgan savdoni ko'rsatish
+        context.user_data["cancel_row"] = row_index
+        context.user_data["cancel_rec"] = rec
 
-        found_sales = []
-        for idx, row in enumerate(all_rows[1:], start=2):
-            holat = str(row[status_col - 1]).strip().lower() if len(row) >= status_col else ""
-            if "bekor" in holat or holat == "yakunlangan":
-                continue
+        jami = format_money(rec.get("Jami Summa", 0))
+        qoldiq = format_money(rec.get("Qoldiq", 0))
+        avans = format_money(rec.get("Boshlang'ich To'lov", 0))
+        tolov_turi = rec.get("To'lov Turi", "")
+        keyingi = rec.get("Keyingi To'lov Sanasi", "")
 
-            row_dump = " ".join([str(cell).lower() for cell in row])
-            if query_text in row_dump:
-                found_sales.append({
-                    "row_index": idx,
-                    "savdo_id": row[id_col - 1] if len(row) >= id_col else "",
-                    "mijoz_ismi": row[name_col - 1] if len(row) >= name_col else "Noma'lum",
-                    "tovar": row[tovar_col - 1] if len(row) >= tovar_col else "Tovar",
-                    "telefon": row[phone_col - 1] if len(row) >= phone_col else ""
-                })
-
-        await status_msg.delete()
-
-        if not found_sales:
-            await update.message.reply_text("📭 Bunday ma'lumotga ega faol nasiya savdosi topilmadi.")
-            return ConversationHandler.END
-
-        keyboard = []
-        for s in found_sales[:10]:
-            nomi = s["mijoz_ismi"]
-            tovar = s["tovar"]
-            savdo_id = s["savdo_id"]
-            id_str = f" [{savdo_id}]" if savdo_id else ""
-            
-            btn_text = f"👤 {nomi} | 📦 {tovar}{id_str}"
-            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"cnlsel_{s['row_index']}")])
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "🎯 <b>Bekor qilinadigan faol savdoni tanlang:</b>",
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
-        return CANCEL_SELECT
-
-    except Exception as e:
-        logger.error(f"Bekor qilish qidiruvida xatolik: {e}")
-        await status_msg.edit_text(f"❌ Xatolik yuz berdi: {escape_html(str(e))}", parse_mode="HTML")
-        return ConversationHandler.END
-
-
-async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin savdoni tanlaganda tasdiqlash oynasi"""
-    query = update.callback_query
-    await query.answer()
-
-    row_idx = int(query.data.split("_")[1])
-    context.user_data["selected_sale_index"] = row_idx
-    cols = context.user_data.get("cols", {})
-
-    try:
-        sh = get_spreadsheet()
-        ws = sh.worksheet("Savdolar")
-        row_data = ws.row_values(row_idx)
-
-        savdo_id = row_data[cols["id"] - 1] if len(row_data) >= cols["id"] else "—"
-        mijoz_ismi = row_data[cols["name"] - 1] if len(row_data) >= cols["name"] else "—"
-        chat_id = row_data[cols["chat"] - 1] if len(row_data) >= cols["chat"] else ""
-        tovar_nomi = row_data[cols["tovar"] - 1] if len(row_data) >= cols["tovar"] else "—"
-        telefon = row_data[cols["phone"] - 1] if len(row_data) >= cols["phone"] else ""
-        
-        headers = ws.row_values(1)
-        price_col = find_column_index(headers, ["jami", "narxi", "summa"]) or 6
-        jami = format_money(row_data[price_col - 1]) if len(row_data) >= price_col else "0"
-
-        context.user_data["sale_info"] = {
-            "savdo_id": savdo_id,
-            "mijoz_ismi": mijoz_ismi,
-            "chat_id": chat_id,
-            "tovar_nomi": tovar_nomi,
-            "telefon": telefon
-        }
-
-        details = (
-            f"🆔 <b>ID:</b> {escape_html(savdo_id)}\n"
-            f"👤 <b>Mijoz:</b> {escape_html(mijoz_ismi)}\n"
-            f"📦 <b>Tovar:</b> {escape_html(tovar_nomi)}\n"
-            f"💰 <b>Narxi:</b> {jami} so'm\n"
+        text = (
+            "🔍 *SAVDO TOPILDI*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 ID: `{rec.get('ID')}`\n"
+            f"📅 Sana: {rec.get('Sana')}\n"
+            f"👤 Mijoz: *{rec.get('FIO')}*\n"
+            f"📞 Telefon: `{rec.get('Telefon')}`\n"
+            f"🛍 Tovar: *{rec.get('Tovar')}*\n"
+            f"💵 Jami: *{jami} so'm*\n"
+            f"💰 Avans: *{avans} so'm*\n"
+            f"📊 Qoldiq: *{qoldiq} so'm*\n"
+            f"📅 To'lov turi: *{tolov_turi}*\n"
+            f"📅 Keyingi to'lov: {keyingi}\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ Bu savdoni bekor qilmoqchimisiz?"
         )
 
         keyboard = [
             [
-                InlineKeyboardButton("✅ Ha, bekor qilinsin", callback_data="cnl_yes"),
-                InlineKeyboardButton("❌ Yo'q, qolsin", callback_data="cnl_no")
+                InlineKeyboardButton("✅ Ha, bekor qilish", callback_data="do_cancel"),
+                InlineKeyboardButton("❌ Yo'q, saqlab qolish", callback_data="keep_sale")
             ]
         ]
-        
-        await query.edit_message_text(
-            text=f"📝 <b>O'chirilayotgan savdo ma'lumotlari:</b>\n\n{details}\n"
-                 f"⚠️ <b>Ushbu savdoni bekor qilishni tasdiqlaysizmi?</b>\n"
-                 f"<i>(Holat 'Bekor qilindi'ga o'tadi va mijozga bildirishnoma ketadi)</i>",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML"
+
+        await update.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return CANCEL_CONFIRM
 
     except Exception as e:
-        logger.error(f"Savdoni tanlashda xatolik: {e}")
-        await query.message.reply_text(f"❌ Ma'lumot o'qishda xatolik yuz berdi.")
+        await update.message.reply_text(
+            f"❌ Xatolik: `{str(e)}`",
+            parse_mode="Markdown"
+        )
         return ConversationHandler.END
 
 
 async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tasdiqlash bosqichi: Holatni yangilash + Mijozga xabar yuborish"""
+    """Bekor qilishni tasdiqlaydi"""
     query = update.callback_query
     await query.answer()
 
-    if query.data == "cnl_no":
-        await query.edit_message_text("🔄 Savdoni bekor qilish jarayoni to'xtatildi.")
+    if query.data == "keep_sale":
+        await query.edit_message_text(
+            "✅ Savdo saqlab qolindi. Hech narsa o'zgarmadi."
+        )
+        context.user_data.clear()
         return ConversationHandler.END
 
-    sale_index = context.user_data.get("selected_sale_index")
-    sale_info = context.user_data.get("sale_info", {})
-    cols = context.user_data.get("cols", {})
-
-    await query.edit_message_text("⏳ Google Sheets yangilanmoqda va mijozga xabar yuborilmoqda...")
-
+    # Bekor qilish
     try:
+        rec = context.user_data.get("cancel_rec")
+        row_index = context.user_data.get("cancel_row")
+
         sh = get_spreadsheet()
-        ws = sh.worksheet("Savdolar")
-        headers = ws.row_values(1)
-        row_values = ws.row_values(sale_index)
-        
+        sheets = ensure_worksheets(sh)
+        ws = sheets["Savdolar"]
+
+        # Holat va izohni yangilash
         today = date.today().strftime("%d.%m.%Y")
-        
-        status_column_idx = cols.get("status") or find_column_index(headers, ["holat", "status"]) or 14
-        cancel_date_idx = find_column_index(headers, ["bekor qilingan sana", "bekor", "sana"]) or 17
-        
-        ws.update_cell(sale_index, status_column_idx, "Bekor qilindi")
-        ws.update_cell(sale_index, cancel_date_idx, f"Bekor qilindi: {today}")
+        ws.update_cell(row_index, 14, "Bekor qilindi")
+        ws.update_cell(row_index, 17, f"Bekor qilindi: {today}")
 
+        # Butun qatorni qizil rang bilan belgilash
         try:
-            row_range = f"A{sale_index}:U{sale_index}"
+            row_range = f"A{row_index}:U{row_index}"
             ws.format(row_range, {
-                "backgroundColor": {"red": 1.0, "green": 0.8, "blue": 0.8},
-                "textFormat": {"strikethrough": True}
+                "backgroundColor": {
+                    "red": 1.0,
+                    "green": 0.8,
+                    "blue": 0.8
+                },
+                "textFormat": {
+                    "strikethrough": True
+                }
             })
-        except Exception:
-            pass
+        except Exception as fmt_err:
+            pass  # Format xatosi bo'lsa davom etamiz
 
-        savdo_id = sale_info.get("savdo_id", "")
-        mijoz_ismi = sale_info.get("mijoz_ismi", "Mijoz")
-        tovar_nomi = sale_info.get("tovar_nomi", "Tovar")
-        telefon_raqam = str(sale_info.get("telefon", "")).strip()
-        
-        # 1-Bosqich: Savdolar varag'idan Chat ID ni tekshiramiz
-        mijoz_chat_id = sale_info.get("chat_id", "")
-        if not mijoz_chat_id and len(row_values) >= cols.get("chat", 3):
-            mijoz_chat_id = row_values[cols.get("chat") - 1]
-            
-        clean_chat_id = clean_telegram_id(mijoz_chat_id)
+        fio = rec.get("FIO", "")
+        tovar = rec.get("Tovar", "")
+        sale_id = rec.get("ID", "")
+        jami = format_money(rec.get("Jami Summa", 0))
+        qoldiq = format_money(rec.get("Qoldiq", 0))
 
-        # 2-Bosqich: AGAR SAVDOLARDA TOPILMASA, MIJOZLAR VARAG'IDAN QIDIRAMIZ 🚀
-        if not clean_chat_id:
-            try:
-                m_ws = sh.worksheet("Mijozlar")
-                m_rows = m_ws.get_all_values()
-                if m_rows:
-                    m_headers = m_rows[0]
-                    m_chat_idx = find_column_index(m_headers, ["chat", "telegram id", "tg id", "user id", "chatid"]) or 2
-                    m_phone_idx = find_column_index(m_headers, ["tel", "telefon", "nomer"]) or 3
-                    m_name_idx = find_column_index(m_headers, ["mijoz", "ism", "fio"]) or 1
-                    
-                    # Telefon yoki Ism bo'yicha mijozlar bazasidan Chat ID qidiramiz
-                    for m_row in m_rows[1:]:
-                        m_phone = str(m_row[m_phone_idx - 1]).strip() if len(m_row) >= m_phone_idx else ""
-                        m_name = str(m_row[m_name_idx - 1]).strip().lower() if len(m_row) >= m_name_idx else ""
-                        
-                        # Telefon mos kelsa yoki Ism 100% bir xil bo'lsa
-                        if (telefon_raqam and telefon_raqam in m_phone) or (mijoz_ismi.lower() in m_name and len(mijoz_ismi) > 3):
-                            found_id = m_row[m_chat_idx - 1] if len(m_row) >= m_chat_idx else None
-                            clean_chat_id = clean_telegram_id(found_id)
-                            if clean_chat_id:
-                                logger.info(f"Chat ID 'Mijozlar' varag'idan topildi: {clean_chat_id}")
-                                break
-            except Exception as sheet_err:
-                logger.error(f"Mijozlar varag'idan qidirishda xatolik: {sheet_err}")
-
-        # Adminga natija xabari
-        id_text = f"<b>ID:</b> {escape_html(savdo_id)}\n" if savdo_id else ""
-        await query.edit_message_text(
-            f"✅ <b>SAVDO BEKOR QILINDI</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{id_text}"
-            f"👤 <b>Mijoz:</b> {escape_html(mijoz_ismi)}\n"
-            f"📦 <b>Tovar:</b> {escape_html(tovar_nomi)}\n\n"
-            f"📊 Google Sheets statusi yangilandi va qizil rangga o'tkazildi! ✅",
-            parse_mode="HTML"
+        success_text = (
+            "✅ *SAVDO BEKOR QILINDI*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 ID: `{sale_id}`\n"
+            f"👤 Mijoz: *{fio}*\n"
+            f"🛍 Tovar: {tovar}\n"
+            f"💵 Jami: {jami} so'm\n"
+            f"💰 Qoldiq edi: {qoldiq} so'm\n"
+            f"📅 Bekor qilindi: {today}\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "📊 Google Sheets da yangilandi ✅"
         )
-        
-        # Mijozga shaxsiy xabar yuborish
-        if clean_chat_id:
-            try:
-                await context.bot.send_message(
-                    chat_id=clean_chat_id,
-                    text=(
-                        f"⚠️ <b>Hurmatli {escape_html(mijoz_ismi)}!</b>\n\n"
-                        f"Sizning 📦 <b>{escape_html(tovar_nomi)}</b> uchun rasmiylashtirilgan "
-                        f"nasiya savdoingiz tomonlar kelishuvi yoki shartnoma shartlariga ko'ra "
-                        f"tizimda <b>BEKOR QILINDI</b>.\n\n"
-                        f"ℹ️ Savollar bo'lsa, ma'muriyatga murojaat qilishingiz mumkin."
-                    ),
-                    parse_mode="HTML"
-                )
-                logger.info(f"Mijozga ({clean_chat_id}) bekor qilish eslatmasi muvaffaqiyatli ketdi.")
-            except Exception as bot_err:
-                logger.error(f"Mijozga yuborishda xatolik: {bot_err}")
-                await query.message.reply_text(
-                    f"ℹ️ <i>Eslatma yuborishda xatolik:</i> <code>{escape_html(str(bot_err))}</code>", 
-                    parse_mode="HTML"
-                )
-        else:
-            await query.message.reply_text("ℹ️ <i>Chat ID bazalardan (Savdolar va Mijozlar varag'idan) topilmadi, eslatma yuborilmadi.</i>", parse_mode="HTML")
+
+        await query.edit_message_text(success_text, parse_mode="Markdown")
 
     except Exception as e:
-        logger.error(f"Tasdiqlashda xatolik: {e}")
-        await query.message.reply_text(f"❌ Xatolik yuz berdi: {escape_html(str(e))}", parse_mode="HTML")
-        
+        await query.edit_message_text(
+            f"❌ Xatolik: `{str(e)}`",
+            parse_mode="Markdown"
+        )
+
+    context.user_data.clear()
     return ConversationHandler.END
 
 
 async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔄 Savdoni bekor qilish paneli yopildi.")
+    """Conversation ni bekor qilish"""
+    from telegram import ReplyKeyboardMarkup, KeyboardButton
+    import os
+    admin_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
+    user_id = update.effective_user.id
+
+    if user_id == admin_id:
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton("➕ Yangi Savdo"), KeyboardButton("💰 To'lov Qabul")],
+            [KeyboardButton("❌ Bekor Qilish"), KeyboardButton("📅 Bugungi To'lovlar")],
+            [KeyboardButton("👥 Mijozlar"), KeyboardButton("📊 Statistika")],
+            [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
+            [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
+            [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
+            [KeyboardButton("🏠 Bosh Menyu")],
+        ], resize_keyboard=True)
+    else:
+        keyboard = ReplyKeyboardMarkup([
+            [KeyboardButton("📊 Mening Kreditim")],
+            [KeyboardButton("📝 Ro'yxatdan O'tish")],
+            [KeyboardButton("🏠 Bosh Menyu")],
+        ], resize_keyboard=True)
+
+    await update.message.reply_text(
+        "🏠 Bosh menyuga qaytildi.",
+        reply_markup=keyboard
+    )
+    context.user_data.clear()
     return ConversationHandler.END
