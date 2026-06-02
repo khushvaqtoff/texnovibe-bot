@@ -1,13 +1,13 @@
 """
 TexnoVibe — Mijoz paneli
-Mijoz o'z nasiyalarini ko'rganda BEKOR QILINGAN savdolarni ko'rsatmaydigan variant.
+Kassa varag'idan eng yangi to'lovlarni jonli (real-time) o'qib, sanasi bilan ko'rsatuvchi mukammal variant.
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
     get_spreadsheet, ensure_worksheets,
-    get_payment_history, save_client_chat_id, ws_to_records
+    save_client_chat_id, ws_to_records
 )
 from datetime import date
 import os
@@ -163,8 +163,9 @@ async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mijoz 'Mening Nasiyam' yoki /mening_malumotlarim tugmasini bosganda"""
+    """Mijoz 'Mening Nasiyam' tugmasini bosganda"""
     chat_id = update.effective_user.id
+    status_msg = await update.message.reply_text("⏳ Ma'lumotlaringiz yangilanmoqda...")
 
     try:
         sh = get_spreadsheet()
@@ -183,7 +184,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 break
 
         if not phone:
-            await update.message.reply_text(
+            await status_msg.edit_text(
                 "❌ Siz hali royxatdan otmagansiz!\n\n"
                 "Royxatdan otish tugmasini bosing.",
                 reply_markup=get_client_keyboard()
@@ -197,15 +198,13 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         for rec in sale_records:
             rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
             if rec_phone == phone_clean:
-                # BEKOR QILINGAN SAVDOLARNI SHU YERNING O'ZIDAYOQ FILTRLAB TASHLAYMIZ 🛑
                 holat = str(rec.get("Holat", "")).strip().lower()
                 if "bekor" in holat:
-                    continue  # Ro'yxatga qo'shmasdan tashlab ketadi
-                
+                    continue
                 active_sales.append(rec)
 
         if not active_sales:
-            await update.message.reply_text(
+            await status_msg.edit_text(
                 f"👤 *{fio}*\n\n"
                 "📋 Hozirda faol kreditingiz yo'q.\n\n"
                 "🏪 TexnoVibe",
@@ -218,10 +217,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
         for rec in active_sales:
             holat = rec.get("Holat", "")
-            if holat == "Yopildi":
-                holat_emoji = "✅"
-            else:
-                holat_emoji = "🔄"
+            holat_emoji = "✅" if holat == "Yopildi" else "🔄"
 
             tovar = rec.get("Tovar", "")
             jami = format_money(rec.get("Jami Summa", 0))
@@ -243,27 +239,62 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 f"━━━━━━━━━━━━━━━━━━━━\n"
             )
 
-        # To'lovlar tarixini dinamik hisoblash qismi
-        history = get_payment_history(phone)
-        if history:
-            sample_rec = history[0]
-            val_key = find_dynamic_key(sample_rec, ["summa", "to'lov summasi", "tolov summasi", "miqdor", "berdi"]) or "To'lov Summasi"
-            date_key = find_dynamic_key(sample_rec, ["sana", "to'lov sanasi", "tolov sanasi", "vaqt"]) or "To'lov Sanasi"
-
-            total_paid = sum(safe_float(r.get(val_key, 0)) for r in history)
-            
-            text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
-            for r in history[-5:]:
-                sana = r.get(date_key, "")
-                summa = format_money(r.get(val_key, 0))
-                text += f"• {sana} — *{summa} so'm*\n"
+        # 🚀 JONLI (REAL-TIME) TO'LOVLAR TARIXINI O'QISH QISMI
+        text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
+        
+        try:
+            # "Kassa" yoki "To'lovlar" varag'ini jonli yuklaymiz (keshni chetlab o'tish uchun)
+            try:
+                ws_kassa = sh.worksheet("Kassa")
+            except:
+                ws_kassa = sh.worksheet("To'lovlar")
                 
-            text += f"\n✅ Jami tolangan: *{format_money(total_paid)} so'm*\n"
-        else:
-            text += f"\n📋 *SO'NGGI TO'LOVLAR:*\n• Hozircha to'lovlar mavjud emas.\n\n✅ Jami tolangan: *0 so'm*\n"
+            kassa_records = ws_to_records(ws_kassa)
+            client_history = []
+            
+            if kassa_records:
+                # Dinamik ustun sarlavhalarini aniqlaymiz
+                sample_k = kassa_records[0]
+                k_phone_key = find_dynamic_key(sample_k, ["tel", "telefon", "nomer"]) or "Telefon"
+                k_val_key = find_dynamic_key(sample_k, ["summa", "to'lov summasi", "tolov summasi", "miqdor", "berdi"]) or "To'lov Summasi"
+                k_date_key = find_dynamic_key(sample_k, ["sana", "to'lov sanasi", "tolov sanasi", "vaqt"]) or "To'lov Sanasi"
+                
+                for r in kassa_records:
+                    k_phone = str(r.get(k_phone_key, "")).replace("+", "").replace(" ", "").replace("-", "")
+                    if k_phone == phone_clean:
+                        client_history.append({
+                            "sana": r.get(k_date_key, ""),
+                            "summa": safe_float(r.get(k_val_key, 0))
+                        })
+            
+            if client_history:
+                total_paid = sum(item["summa"] for item in client_history)
+                # Eng oxirgi to'langanlarini tepaga yoki tartib bilan chiqarish uchun oxirgi 5 tasini olamiz
+                for item in client_history[-5:]:
+                    text += f"• {item['sana']} — *{format_money(item['summa'])} so'm*\n"
+                text += f"\n✅ Jami tolangan: *{format_money(total_paid)} so'm*\n"
+            else:
+                text += "• Hozircha to'lovlar tarixi mavjud emas.\n\n✅ Jami tolangan: *0 so'm*\n"
+                
+        except Exception as history_err:
+            # Agar Kassa varag'ini o'qishda kutilmagan xato bo'lsa, zaxira sifatida eski funksiyani chaqiradi
+            text += "• To'lovlar tarixi yuklanmoqda...\n"
+            from sheets.google_sheets import get_payment_history
+            history = get_payment_history(phone)
+            if history:
+                sample_rec = history[0]
+                val_key = find_dynamic_key(sample_rec, ["summa", "to'lov summasi"]) or "To'lov Summasi"
+                date_key = find_dynamic_key(sample_rec, ["sana", "to'lov sanasi"]) or "To'lov Sanasi"
+                total_paid = sum(safe_float(r.get(val_key, 0)) for r in history)
+                for r in history[-5:]:
+                    text += f"• {r.get(date_key, "")} — *{format_money(r.get(val_key, 0))} so'm*\n"
+                text += f"\n✅ Jami tolangan: *{format_money(total_paid)} so'm*\n"
+            else:
+                text += "\n✅ Jami tolangan: *0 so'm*\n"
 
         text += "\n🏪 TexnoVibe"
 
+        await status_msg.delete()
         await update.message.reply_text(
             text,
             parse_mode="Markdown",
@@ -271,6 +302,8 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         )
 
     except Exception as e:
+        if 'status_msg' in locals():
+            await status_msg.delete()
         await update.message.reply_text(
             f"❌ Xatolik: `{str(e)}`",
             parse_mode="Markdown"
