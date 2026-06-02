@@ -19,6 +19,12 @@ load_dotenv()
 # Logger sozlamasi
 logger = logging.getLogger(__name__)
 
+# sheets/google_sheets.py
+
+def normalize_phone(phone: str) -> str:
+    """Telefon raqamini tozalash funksiyasi"""
+    return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
