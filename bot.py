@@ -465,7 +465,7 @@ def main():
     # === MIJOZ TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"), cmd_mening_malumotlarim))
 
-    app.add_handler(CommandHandler("register", cmd_register))
+    app.add_handler(CommandHandler("register", start_register))
 
     # === BUYRUQLAR ===
     app.add_handler(CommandHandler("tarix", cmd_history))
