@@ -17,6 +17,9 @@ def format_money(amount) -> str:
     except:
         return str(amount)
 
+def normalize_phone(phone: str) -> str:
+    """Telefon raqamini bazaga moslash uchun tozalash"""
+    return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
 async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -44,7 +47,9 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = update.message.text.strip()
-    clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+    # Eski qatorni o'chirib, yangisini qo'ying:
+    clean_phone = normalize_phone(phone) 
+    
     if not clean_phone.isdigit() or len(clean_phone) < 9:
         await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting:")
         return PHONE
@@ -53,7 +58,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Tekshirilmoqda...")
 
     try:
-        dup = check_duplicate(phone)
+        dup = check_duplicate(clean_phone)
         if dup["exists"]:
             fio = dup["fio"]
             product = dup["product"]
