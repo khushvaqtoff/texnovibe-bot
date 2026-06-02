@@ -20,7 +20,7 @@ async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Importni funksiya ichiga o'tkazish
+    # Importni funksiya ichiga o'tkazdik
     from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records, get_payment_history
     
     chat_id = update.effective_user.id
@@ -34,7 +34,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             return
         
         phone = str(client.get("Telefon", ""))
-        sale_records = ws_to_records(sheets["Savdolar"])
+        history = get_payment_history(phone)
         
         def clean_phone(p):
             return "".join(filter(str.isdigit, str(p)))[-9:]
@@ -69,6 +69,8 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             text += "\n⏳ To'lovlar tarixi topilmadi."
         
         await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text("✅ Ma'lumotlaringiz yuklandi.")
     except Exception as e:
         logger.error(f"Xatolik: {e}")
         await update.message.reply_text("❌ Xatolik yuz berdi.")

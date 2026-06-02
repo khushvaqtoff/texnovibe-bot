@@ -11,11 +11,11 @@ from google.auth.transport.requests import Request
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 
-load_dotenv()
 from handlers.client_panel import (
     cmd_mening_malumotlarim, start_register, 
     register_phone, cancel_register
 )
+
 from handlers.search_handler import start_search, SEARCH_QUERY, search_query
 
 load_dotenv()
@@ -435,7 +435,6 @@ def get_overdue_payments(days: int = 3) -> list:
 
 
 def get_payment_history(phone: str) -> list:
-    # Aylanma importni oldini olish uchun importni funksiya ichiga o'tkazdik
     from handlers.client_panel import ws_to_records 
     
     sh = get_spreadsheet()
