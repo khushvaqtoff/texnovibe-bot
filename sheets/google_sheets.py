@@ -59,12 +59,8 @@ CLIENT_HEADERS = [
 ]
 
 def get_sheets_client():
-    creds = None
-    token_b64 = os.getenv("TOKEN_PICKLE_BASE64")
-    if token_b64:
-    	gc = gspread.service_account(filename='credentials.json')
-    return gc
-try:
+    # credentials.json fayli asosiy papkada bo'lishi shart
+    return gspread.service_account(filename='credentials.json')
 	clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
 	token_bytes = base64.b64decode(clean)
 	creds = pickle.loads(token_bytes)
@@ -72,7 +68,7 @@ except Exception as e:
 	logger.error(f"Token o'qishda xato: {e}")
 
     if creds is None and os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "rb") as f:
+    	with open(TOKEN_FILE, "rb") as f:
             creds = pickle.load(f)
 
     if not creds or not creds.valid:
@@ -122,20 +118,13 @@ def generate_sale_id(ws_sales):
         return f"TXN-{num:03d}"
     return f"TXN-{len(records):03d}"
 
-def add_sale(sale_data: dict) -> dict:
-    sh = get_spreadsheet()
-    sheets = ensure_worksheets(sh)
-    ws_sales = sheets["Savdolar"]
-    ws_clients = sheets["Mijozlar"]
-    today = date.today()
-    sale_id = generate_sale_id(ws_sales)
-    remaining = float(sale_data["total_price"]) - float(sale_data.get("down_payment", 0))
-    period = int(sale_data["installment_period"])
-    payment_per_period = round(remaining / period)
-    gc = get_sheets_client()
-    sheet = gc.open("Jadvalingiz_Nomi").sheet1
-    sheet.append_row(data)
-    
+def add_sale(data):
+    try:
+        gc = get_sheets_client()
+        sheet = gc.open("Jadvalingiz_Nomi").sheet1
+        sheet.append_row(data)
+    except Exception as e:
+        print(f"Xatolik yuz berdi: {e}")    
     if sale_data["payment_type"] == "Haftalik":
         pay_day = int(sale_data.get("pay_day", 0) or 0)
         if pay_day > 0:
