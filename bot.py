@@ -46,10 +46,10 @@ from handlers.cancel_sale_handler import (
 
 # === MIJOZ PANEL HANDLERLARI ===
 from handlers.client_panel import (
-    cmd_mening_malumotlarim, cmd_register,
-    start_register, register_phone, cancel_register,
-    REGISTER_PHONE
+    cmd_mening_malumotlarim, start_register, 
+    register_phone, cancel_register
 )
+from handlers.search_handler import start_search, SEARCH_QUERY, search_query
 
 # === KATALOG HANDLERLARI ===
 from handlers.catalog_handler import (
