@@ -1,5 +1,6 @@
 """
-Mijoz paneli
+TexnoVibe — Mijoz paneli
+Mijoz o'z nasiyalarini ko'rganda to'langan to'lovlar summasini dinamik va to'g'ri hisoblovchi variant.
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -15,16 +16,34 @@ REGISTER_PHONE = 40
 
 def safe_float(val):
     try:
-        return float(str(val).replace(" ", "").replace(",", "").strip() or 0)
+        if not val:
+            return 0.0
+        # Katak ichidagi har xil bo'shliq va belgilarni tozalaymiz
+        clean_val = "".join(c for c in str(val) if c.isdigit() or c in [".", "-"])
+        return float(clean_val)
     except:
-        return 0
+        return 0.0
 
 
 def format_money(amount) -> str:
     try:
+        if not amount or str(amount).strip() in ["", "-", "0"]:
+            return "0"
         return f"{int(float(amount)):,}".replace(",", " ")
     except:
         return str(amount)
+
+
+def find_dynamic_key(record, keys):
+    """Sarlavha kalit so'zlariga qarab record ichidan to'g'ri kalitni topadi"""
+    if not record:
+        return None
+    for r_key in record.keys():
+        r_key_lower = str(r_key).strip().lower()
+        for key in keys:
+            if key in r_key_lower:
+                return r_key
+    return None
 
 
 def get_client_keyboard():
@@ -56,7 +75,6 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = user.id
     username = user.username or ""
 
-    # Telefon raqamini tozalash
     phone_clean = phone_input.replace("+", "").replace(" ", "").replace("-", "")
 
     if not phone_clean.isdigit() or len(phone_clean) < 9:
@@ -68,7 +86,6 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return REGISTER_PHONE
 
-    # + qo'shish
     if not phone_input.startswith("+"):
         phone = "+" + phone_clean
     else:
@@ -97,7 +114,6 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return REGISTER_PHONE
 
-        # Chat ID ni saqlash
         save_client_chat_id(phone, chat_id, username)
 
         fio = found_rec.get("FIO", "")
@@ -139,10 +155,8 @@ async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/royhattan_otish buyrug'i"""
     args = context.args
     if args:
-        # Argument bilan kelsa — bevosita ro'yxatdan o'tkazish
         context.args = args
         await register_phone(update, context)
     else:
@@ -150,7 +164,7 @@ async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/mening_malumotlarim"""
+    """Mijoz 'Mening Nasiyam' yoki /mening_malumotlarim tugmasini bosganda"""
     chat_id = update.effective_user.id
 
     try:
@@ -227,15 +241,25 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 f"━━━━━━━━━━━━━━━━━━━━\n"
             )
 
+        # TO'LOVLAR TARIXINI TO'G'RI VA DINAMIK HISOBLASH QISMI 🚀
         history = get_payment_history(phone)
         if history:
-            total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in history)
+            # Tarixdagi birinchi qatordan dinamik ravishda to'lov summasi va sana ustunlarini qidiramiz
+            sample_rec = history[0]
+            val_key = find_dynamic_key(sample_rec, ["summa", "to'lov summasi", "tolov summasi", "miqdor", "berdi"]) or "To'lov Summasi"
+            date_key = find_dynamic_key(sample_rec, ["sana", "to'lov sanasi", "tolov sanasi", "vaqt"]) or "To'lov Sanasi"
+
+            total_paid = sum(safe_float(r.get(val_key, 0)) for r in history)
+            
             text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
-            for rec in history[-5:]:
-                sana = rec.get("To'lov Sanasi", "")
-                summa = format_money(rec.get("To'lov Summasi", 0))
+            for r in history[-5:]:
+                sana = r.get(date_key, "")
+                summa = format_money(r.get(val_key, 0))
                 text += f"• {sana} — *{summa} so'm*\n"
+                
             text += f"\n✅ Jami tolangan: *{format_money(total_paid)} so'm*\n"
+        else:
+            text += f"\n📋 *SO'NGGI TO'LOVLAR:*\n• Hozircha to'lovlar mavjud emas.\n\n✅ Jami tolangan: *0 so'm*\n"
 
         text += "\n🏪 TexnoVibe"
 
