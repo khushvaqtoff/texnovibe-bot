@@ -6,19 +6,17 @@ import os
 import pickle
 import base64
 import gspread
+import calendar
+import logging
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 
-from handlers.client_panel import (
-    cmd_mening_malumotlarim, start_register, 
-    register_phone, cancel_register
-)
-
-from handlers.search_handler import start_search, SEARCH_QUERY, search_query
-
 load_dotenv()
+
+# Logger sozlamasi
+logger = logging.getLogger(__name__)
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -47,19 +45,16 @@ CLIENT_HEADERS = [
     "Ish Joyi", "Oxirgi Faollik", "Eslatma Oladi"
 ]
 
-
 def get_sheets_client():
     creds = None
     token_b64 = os.getenv("TOKEN_PICKLE_BASE64")
     if token_b64:
         try:
-            clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "")
-            clean = clean.replace("-----END CERTIFICATE-----", "")
-            clean = clean.replace("\r\n", "").replace("\n", "").replace(" ", "")
+            clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
             token_bytes = base64.b64decode(clean)
             creds = pickle.loads(token_bytes)
         except Exception as e:
-            print(f"Token o'qishda xato: {e}")
+            logger.error(f"Token o'qishda xato: {e}")
 
     if creds is None and os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "rb") as f:
@@ -76,12 +71,9 @@ def get_sheets_client():
             with open(TOKEN_FILE, "wb") as f:
                 pickle.dump(creds, f)
         else:
-            raise Exception(
-                "Token topilmadi! TOKEN_PICKLE_BASE64 yoki credentials.json kerak."
-            )
+            raise Exception("Token topilmadi! TOKEN_PICKLE_BASE64 yoki credentials.json kerak.")
 
     return gspread.authorize(creds)
-
 
 def get_spreadsheet():
     client = get_sheets_client()
@@ -89,9 +81,7 @@ def get_spreadsheet():
     if sheet_id:
         return client.open_by_key(sheet_id)
     sh = client.create("TexnoVibe Nasiya Baza")
-    print(f"\n✅ Yangi spreadsheet: SPREADSHEET_ID={sh.id}\n")
     return sh
-
 
 def ensure_worksheets(sh):
     needed = ["Savdolar", "Tolovlar", "Mijozlar"]
@@ -101,15 +91,11 @@ def ensure_worksheets(sh):
             ws = sh.add_worksheet(title=name, rows=1000, cols=20)
             if name == "Savdolar":
                 ws.append_row(SALE_HEADERS)
-                ws.format("A1:R1", {"textFormat": {"bold": True}, "backgroundColor": {"red": 0.2, "green": 0.6, "blue": 0.9}})
             elif name == "Tolovlar":
                 ws.append_row(PAYMENT_HEADERS)
-                ws.format("A1:G1", {"textFormat": {"bold": True}, "backgroundColor": {"red": 0.3, "green": 0.8, "blue": 0.5}})
             elif name == "Mijozlar":
                 ws.append_row(CLIENT_HEADERS)
-                ws.format("A1:J1", {"textFormat": {"bold": True}, "backgroundColor": {"red": 1.0, "green": 0.8, "blue": 0.2}})
     return {name: sh.worksheet(name) for name in needed}
-
 
 def generate_sale_id(ws_sales):
     records = ws_sales.get_all_values()
@@ -121,7 +107,6 @@ def generate_sale_id(ws_sales):
         return f"TXN-{num:03d}"
     return f"TXN-{len(records):03d}"
 
-
 def add_sale(sale_data: dict) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
@@ -132,7 +117,7 @@ def add_sale(sale_data: dict) -> dict:
     remaining = float(sale_data["total_price"]) - float(sale_data.get("down_payment", 0))
     period = int(sale_data["installment_period"])
     payment_per_period = round(remaining / period)
-    import calendar
+    
     if sale_data["payment_type"] == "Haftalik":
         pay_day = int(sale_data.get("pay_day", 0) or 0)
         if pay_day > 0:
@@ -142,7 +127,6 @@ def add_sale(sale_data: dict) -> dict:
             next_payment = today + timedelta(days=days_ahead)
         else:
             next_payment = today + timedelta(weeks=1)
-            sale_data["pay_day"] = next_payment.isoweekday()
     else:
         pay_day = int(sale_data.get("pay_day", 0) or 0)
         if pay_day > 0:
@@ -150,79 +134,39 @@ def add_sale(sale_data: dict) -> dict:
             next_year = today.year if today.month < 12 else today.year + 1
             max_day = calendar.monthrange(next_year, next_month)[1]
             actual_day = min(pay_day, max_day)
-            from datetime import date as date_cls
-            next_payment = date_cls(next_year, next_month, actual_day)
+            next_payment = date(next_year, next_month, actual_day)
         else:
             next_payment = today + timedelta(days=30)
-    row = [
-        sale_id, today.strftime("%d.%m.%Y"), sale_data["fio"], sale_data["phone"],
-        sale_data["product"], float(sale_data["total_price"]), float(sale_data.get("down_payment", 0)),
-        remaining, sale_data["payment_type"], period, payment_per_period,
-        next_payment.strftime("%d.%m.%Y"), sale_data.get("agent", ""), "Faol", "🟡 Yangi",
-        sale_data.get("birthday", ""), "", 0,
-        sale_data.get("work_place", ""),
-        sale_data.get("pay_day", ""),
-        float(sale_data.get("down_payment", 0))
-    ]
+            
+    row = [sale_id, today.strftime("%d.%m.%Y"), sale_data["fio"], sale_data["phone"],
+           sale_data["product"], float(sale_data["total_price"]), float(sale_data.get("down_payment", 0)),
+           remaining, sale_data["payment_type"], period, payment_per_period,
+           next_payment.strftime("%d.%m.%Y"), sale_data.get("agent", ""), "Faol", "🟡 Yangi",
+           sale_data.get("birthday", ""), "", 0, sale_data.get("work_place", ""),
+           sale_data.get("pay_day", ""), float(sale_data.get("down_payment", 0))]
+    
     ws_sales.append_row(row)
     update_client_db(ws_clients, sale_data)
-    schedule = generate_payment_schedule(remaining, payment_per_period, sale_data["payment_type"], period, next_payment)
-    return {
-        "sale_id": sale_id, "remaining": remaining,
-        "payment_per_period": payment_per_period,
-        "next_payment": next_payment.strftime("%d.%m.%Y"),
-        "schedule": schedule
-    }
+    
+    return {"sale_id": sale_id}
 
-
-def generate_payment_schedule(remaining, per_payment, pay_type, periods, start_date):
-    schedule = []
-    current_date = start_date
-    current_remaining = remaining
-    for i in range(1, periods + 1):
-        payment = min(per_payment, current_remaining)
-        current_remaining -= payment
-        schedule.append({
-            "num": i,
-            "date": current_date.strftime("%d.%m.%Y"),
-            "amount": payment,
-            "remaining": max(0, current_remaining)
-        })
-        current_date = current_date + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
-    return schedule
-
+def update_client_db(ws_clients, sale_data):
+    all_values = ws_clients.get_all_values()
+    phone = str(sale_data["phone"]).replace("+", "").replace(" ", "")
+    for i, row in enumerate(all_values[1:], start=2):
+        if len(row) > 1 and str(row[1]).replace("+", "").replace(" ", "") == phone:
+            return
+    ws_clients.append_row([sale_data["fio"], sale_data["phone"], "", "", 1, 0, 0, "Bronze", sale_data.get("birthday", ""), date.today().strftime("%d.%m.%Y"), sale_data.get("work_place", ""), date.today().strftime("%d.%m.%Y"), "Yoq"])
 
 def ws_to_records(ws):
     values = ws.get_all_values()
-    if len(values) < 2:
-        return []
+    if len(values) < 2: return []
     headers = values[0]
-    result = []
-    for row in values[1:]:
-        rec = {}
-        for j, h in enumerate(headers):
-            rec[h] = row[j] if j < len(row) else ""
-        result.append(rec)
-    return result
-
+    return [dict(zip(headers, row)) for row in values[1:]]
 
 def safe_float(val, default=0):
-    try:
-        v = str(val).replace(" ", "").replace(",", "").strip()
-        return float(v) if v else default
-    except:
-        return default
-
-
-def normalize_phone(phone: str) -> str:
-    p = str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
-    if p.startswith("998") and len(p) == 12:
-        return p
-    if len(p) == 9:
-        return "998" + p
-    return p
-
-
+    try: return float(str(val).replace(" ", "").replace(",", "").strip())
+    except: return default
 # ─────────────────────────────────────────────────────────────
 # record_payment — row_index parametri YANGI qo'shildi
 # Agar row_index berilsa, o'sha qatorni yangilaydi (tovar aniq).
