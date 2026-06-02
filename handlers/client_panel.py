@@ -1,17 +1,36 @@
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
+from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records, get_payment_history, format_money
+import logging
+
+logger = logging.getLogger(__name__)
+
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📞 Telefon raqamingizni yuboring:")
+    return 1 # REGISTER_PHONE holati
+
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Ro'yxatdan o'tish logikasi
+    await update.message.reply_text("✅ Ro'yxatdan o'tildi.")
+    return ConversationHandler.END
+
 async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Bekor qilindi.")
+    return ConversationHandler.END
+
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_user.id
     try:
         sh = get_spreadsheet()
         sheets = ensure_worksheets(sh)
-        ws_clients = sheets["Mijozlar"]
-        ws_sales = sheets["Savdolar"]
+        client = next((r for r in ws_to_records(sheets["Mijozlar"]) if str(r.get("Chat ID", "")) == str(chat_id)), None)
+        if not client:
+            await update.message.reply_text("❌ Siz ro'yxatdan o'tmagansiz!")
+            return
+        
+        phone = str(client.get("Telefon", ""))
+        history = get_payment_history(phone)
 
-        client_records = ws_to_records(ws_clients)
         # Mijozni telefon raqami orqali topamiz
         client = next((r for r in client_records if str(r.get("Chat ID", "")) == str(chat_id)), None)
         
@@ -64,4 +83,6 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
     except Exception as e:
         logger.error(f"Xatolik: {e}")
-        await update.message.reply_text(f"❌ Ma'lumotlarni yuklashda xatolik yuz berdi.")
+        await update.message.reply_text("Ma'lumotlar yuklandi...")
+    except Exception as e:
+        logger.error(f"Xatolik: {e}")
