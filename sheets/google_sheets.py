@@ -11,7 +11,8 @@ from google.auth.transport.requests import Request
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
 
-load_dotenv()from handlers.client_panel import (
+load_dotenv()
+from handlers.client_panel import (
     cmd_mening_malumotlarim, start_register, 
     register_phone, cancel_register
 )

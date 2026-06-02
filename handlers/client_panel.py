@@ -20,7 +20,7 @@ async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Importni funksiya ichiga o'tkazdik
+    # Importni funksiya ichiga o'tkazish
     from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records, get_payment_history
     
     chat_id = update.effective_user.id
@@ -34,60 +34,13 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             return
         
         phone = str(client.get("Telefon", ""))
-        history = get_payment_history(phone)
-
-    # IMPORTNI FUNKSIYA ICHIGA QO'YDIK
-    from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records, get_payment_history
-    
-    chat_id = update.effective_user.id
-    try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        # Mijozni topish...
-        client = next((r for r in ws_to_records(sheets["Mijozlar"]) if str(r.get("Chat ID", "")) == str(chat_id)), None)
+        sale_records = ws_to_records(sheets["Savdolar"])
         
-        if not client:
-            await update.message.reply_text("❌ Siz hali ro'yxatdan o'tmagansiz!")
-            return
-
-    # Ro'yxatdan o'tish logikasi
-    await update.message.reply_text("✅ Ro'yxatdan o'tildi.")
-    return ConversationHandler.END
-
-async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Bekor qilindi.")
-    return ConversationHandler.END
-
-async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_user.id
-    try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        client = next((r for r in ws_to_records(sheets["Mijozlar"]) if str(r.get("Chat ID", "")) == str(chat_id)), None)
-        if not client:
-            await update.message.reply_text("❌ Siz ro'yxatdan o'tmagansiz!")
-            return
-        
-        phone = str(client.get("Telefon", ""))
-        history = get_payment_history(phone)
-
-        # Mijozni telefon raqami orqali topamiz
-        client = next((r for r in client_records if str(r.get("Chat ID", "")) == str(chat_id)), None)
-        
-        if not client:
-            await update.message.reply_text("❌ Siz hali ro'yxatdan o'tmagansiz!")
-            return
-
-        phone = str(client.get("Telefon", ""))
-        sale_records = ws_to_records(ws_sales)
-        
-        # Telefon raqamni tozalash (bazadagi va mijozdagi)
         def clean_phone(p):
             return "".join(filter(str.isdigit, str(p)))[-9:]
 
         phone_clean = clean_phone(phone)
         
-        # Savdolarni filtrlash: Telefon mos kelishi va "bekor" so'zi bo'lmasligi kerak
         active_sales = [
             r for r in sale_records 
             if clean_phone(r.get("Telefon", "")) == phone_clean 
@@ -104,26 +57,18 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             qoldiq = format_money(rec.get("Qoldiq", 0))
             text += f"🛍 *{tovar}*\n💰 Qoldiq: {qoldiq} so'm\n━━━━━━━━━━━━━━━━━━━━\n"
 
-        # TO'LOVLAR TARIXINI OLISH
         history = get_payment_history(phone)
-        
-        # Tarixni sanasi bo'yicha saralash (eng oxirgisini yuqoriga chiqarish uchun)
         if history:
             text += "📋 *SO'NGGI TO'LOVLAR:*\n"
-            # Agar 'To'lov Sanasi' ustuni bo'lsa, shunga qarab teskari tartiblaymiz
             history_sorted = sorted(history, key=lambda x: str(x.get("To'lov Sanasi", "")), reverse=True)
-            
-            for rec in history_sorted[:5]: # Eng oxirgi 5 tasini ko'rsatish
+            for rec in history_sorted[:5]:
                 sana = rec.get("To'lov Sanasi", "Sana yo'q")
                 summa = format_money(rec.get("To'lov Summasi", 0))
                 text += f"• {sana} — *{summa} so'm*\n"
         else:
             text += "\n⏳ To'lovlar tarixi topilmadi."
         
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
-    except Exception as e:
-        logger.error(f"Xatolik: {e}")
-      await update.message.reply_text("✅ Ma'lumotlaringiz yuklandi.")
+        await update.message.reply_text(text, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Xatolik: {e}")
         await update.message.reply_text("❌ Xatolik yuz berdi.")
