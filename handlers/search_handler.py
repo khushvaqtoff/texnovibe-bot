@@ -1,7 +1,7 @@
 """
 TexnoVibe — handlers/search_handler.py
 Mijozlar va savdolarni umumiy qidirish paneli.
-Faqat FAOL savdolarni ko'rsatadigan va ism/narx ustunlarini aniq topadigan variant.
+bot.py importlari bilan 100% mos keladigan tuzatilgan variant.
 """
 
 import logging
@@ -12,13 +12,12 @@ import html
 
 logger = logging.getLogger(__name__)
 
-# State
-SEARCH_INPUT = 1
+# bot.py dagi importga mos holat nomi (State)
+SEARCH_QUERY = 1
 
 
 def format_money(amount) -> str:
     try:
-        # Bo'sh yoki noto'g'ri qiymat kelsa 0 so'm deb yozmasligi uchun tekshiramiz
         if not amount or str(amount).strip() in ["", "-", "0"]:
             return "0"
         return f"{int(float(amount)):,}".replace(",", " ")
@@ -48,11 +47,11 @@ async def start_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<i>(Masalan: Anvar yoki 901234567)</i>",
         parse_mode="HTML"
     )
-    return SEARCH_INPUT
+    return SEARCH_QUERY
 
 
-async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Qidiruv natijalarini chiqarish"""
+async def search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """bot.py dagi importga mos funksiya nomi — Qidiruv natijalarini chiqarish"""
     query_text = update.message.text.strip().lower()
     status_msg = await update.message.reply_text("⏳ Ma'lumotlar qidirilmoqda...")
 
@@ -67,7 +66,7 @@ async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         headers = all_rows[0]
         
-        # Sarlavhalarga qarab ustunlarni dinamik va xatosiz aniqlaymiz
+        # Sarlavhalarga qarab ustunlarni dinamik aniqlaymiz
         name_col = find_column_index(headers, ["mijoz", "ism", "fio", "f.i.o"]) or 2
         phone_col = find_column_index(headers, ["tel", "telefon", "nomer"]) or 4
         tovar_col = find_column_index(headers, ["tovar", "mahsulot", "buyum"]) or 5
@@ -76,22 +75,20 @@ async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         found_results = []
         
-        # 2-qatordan boshlab barcha qatorlarni ko'rib chiqamiz
         for idx, row in enumerate(all_rows[1:], start=2):
             if len(row) < 2:
                 continue
 
-            # 1. Bekor bo'lgan savdolarni filtrdan o'tkazamiz (CHIQQARMASLIK UCHUN) 🛑
+            # 1. Bekor qilinganlarni ko'rsatmaymiz (FILTR) 🛑
             holat = str(row[status_col - 1]).strip() if len(row) >= status_col else "Faol"
             if "bekor" in holat.lower():
-                continue  # Bekor qilingan bo'lsa ro'yxatga qo'shmaymiz, o'tkazib yuboramiz
+                continue
 
-            # 2. Qidiruv matnini qatordan izlaymiz (Ism yoki Telefon)
+            # 2. Qidiruv matnini tekshirish
             row_dump = " ".join([str(cell).lower() for cell in row])
             if query_text in row_dump:
-                mijoz_ismi = row[name_col - 1] if len(row) >= name_col else "Noma'lum"
-                # Agar katak bo'sh bo'lsa, baribir Noma'lum bo'lib qolmasligi uchun zaxira
-                if not mijoz_ismi or str(mijoz_ismi).strip() == "":
+                mijoz_ismi = row[name_col - 1].strip() if len(row) >= name_col else "Noma'lum"
+                if not mijoz_ismi or mijoz_ismi == "":
                     mijoz_ismi = "Noma'lum"
 
                 found_results.append({
@@ -108,7 +105,7 @@ async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("📭 Bunday ma'lumotga ega faol savdo topilmadi.")
             return ConversationHandler.END
 
-        # Natijalarni chiroyli matn holatiga keltiramiz
+        # Natijalarni chiroyli matn qilish
         response_text = f"🎯 <b>Qidiruv natijalari ({len(found_results)} ta):</b>\n"
         response_text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -122,17 +119,18 @@ async def process_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"────────────────────\n"
             )
 
-        # Telegram xabar uzunligi chegarasidan oshib ketmasligi uchun (max 4096 belgi)
         if len(response_text) > 4000:
-            response_text = response_text[:3900] + "\n\n<i>...va yana ko'plab natijalar bor.</i>"
+            response_text = response_text[:3900] + "\n\n<i>...va yana natijalar bor.</i>"
 
         await update.message.reply_text(response_text, parse_mode="HTML")
         return ConversationHandler.END
 
     except Exception as e:
         logger.error(f"Qidiruv handlerida xatolik: {e}")
-        if 'status_msg' in locals():
+        try:
             await status_msg.edit_text(f"❌ Xatolik: {escape_html(str(e))}", parse_mode="HTML")
+        except Exception:
+            pass
         return ConversationHandler.END
 
 
