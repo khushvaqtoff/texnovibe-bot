@@ -1,6 +1,6 @@
 """
 TexnoVibe — Mijoz paneli
-Mijoz o'z nasiyalarini ko'rganda to'langan to'lovlar summasini dinamik va to'g'ri hisoblovchi variant.
+Mijoz o'z nasiyalarini ko'rganda BEKOR QILINGAN savdolarni ko'rsatmaydigan variant.
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -18,7 +18,6 @@ def safe_float(val):
     try:
         if not val:
             return 0.0
-        # Katak ichidagi har xil bo'shliq va belgilarni tozalaymiz
         clean_val = "".join(c for c in str(val) if c.isdigit() or c in [".", "-"])
         return float(clean_val)
     except:
@@ -35,7 +34,7 @@ def format_money(amount) -> str:
 
 
 def find_dynamic_key(record, keys):
-    """Sarlavha kalit so'zlariga qarab record ichidan to'g'ri kalitni topadi"""
+    """Sarlavha kalit so'zlarga qarab record ichidan to'g'ri kalitni topadi"""
     if not record:
         return None
     for r_key in record.keys():
@@ -198,12 +197,17 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         for rec in sale_records:
             rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
             if rec_phone == phone_clean:
+                # BEKOR QILINGAN SAVDOLARNI SHU YERNING O'ZIDAYOQ FILTRLAB TASHLAYMIZ 🛑
+                holat = str(rec.get("Holat", "")).strip().lower()
+                if "bekor" in holat:
+                    continue  # Ro'yxatga qo'shmasdan tashlab ketadi
+                
                 active_sales.append(rec)
 
         if not active_sales:
             await update.message.reply_text(
                 f"👤 *{fio}*\n\n"
-                "📋 Hozirda faol kreditingiz yoq.\n\n"
+                "📋 Hozirda faol kreditingiz yo'q.\n\n"
                 "🏪 TexnoVibe",
                 parse_mode="Markdown",
                 reply_markup=get_client_keyboard()
@@ -216,8 +220,6 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             holat = rec.get("Holat", "")
             if holat == "Yopildi":
                 holat_emoji = "✅"
-            elif holat == "Bekor qilindi":
-                holat_emoji = "❌"
             else:
                 holat_emoji = "🔄"
 
@@ -241,10 +243,9 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 f"━━━━━━━━━━━━━━━━━━━━\n"
             )
 
-        # TO'LOVLAR TARIXINI TO'G'RI VA DINAMIK HISOBLASH QISMI 🚀
+        # To'lovlar tarixini dinamik hisoblash qismi
         history = get_payment_history(phone)
         if history:
-            # Tarixdagi birinchi qatordan dinamik ravishda to'lov summasi va sana ustunlarini qidiramiz
             sample_rec = history[0]
             val_key = find_dynamic_key(sample_rec, ["summa", "to'lov summasi", "tolov summasi", "miqdor", "berdi"]) or "To'lov Summasi"
             date_key = find_dynamic_key(sample_rec, ["sana", "to'lov sanasi", "tolov sanasi", "vaqt"]) or "To'lov Sanasi"
