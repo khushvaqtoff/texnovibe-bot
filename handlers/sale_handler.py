@@ -10,15 +10,15 @@ import os
 NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
     INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, WORK_PLACE, PAY_DAY, CONFIRM = range(11)
 
+def normalize_phone(phone: str) -> str:
+    """Telefon raqamini bazaga moslash uchun tozalash"""
+    return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
 def format_money(amount) -> str:
     try:
         return f"{int(float(amount)):,}".replace(",", " ")
     except:
         return str(amount)
-
-def normalize_phone(phone: str) -> str:
-    return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
 async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -28,7 +28,6 @@ async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "(Masalan: Anvarov Ali Karimovich)"
     )
     return NAME
-
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.message.text.strip()
@@ -43,14 +42,16 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PHONE
 
-
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = update.message.text.strip()
-    clean_phone = normalize_phone(phone)  # Indentatsiya to'g'ri bo'lishi shart
+    clean_phone = normalize_phone(phone)
     
     if not clean_phone.isdigit() or len(clean_phone) < 9:
-        # ...
+        await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting (+998xxxxxxxxx):")
         return PHONE
+
+    context.user_data["phone"] = clean_phone
+    await update.message.reply_text("⏳ Tekshirilmoqda...")
 
     try:
         dup = check_duplicate(clean_phone)
@@ -76,13 +77,12 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Baza tekshirishda xato: {str(e)}\nDavom etilmoqda...")
 
     await update.message.reply_text(
-        f"✅ Telefon: {phone}\n\n"
+        f"✅ Telefon: {clean_phone}\n\n"
         "3️⃣ Mijozning ish joyini kiriting:\n"
         "(Masalan: Bozor, Maktab, Xususiy)\n"
         "(Yo'q bo'lsa: - yozing)"
     )
     return PRODUCT
-
 
 # TUZATISH: Bu funksiya ish joyini oladi (nom o'zgartirilmadi, mantiq tuzatildi)
 async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
