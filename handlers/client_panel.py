@@ -1,21 +1,14 @@
 """
-Mijoz paneli — Tuzatilgan va optimallashtirilgan versiya
+TexnoVibe Nasiya Bot — Mijoz paneli (To'liq tuzatilgan)
 """
-
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
     get_spreadsheet, ensure_worksheets,
-    get_payment_history, save_client_chat_id, ws_to_records
+    get_payment_history, ws_to_records
 )
 
 REGISTER_PHONE = 40
-
-def safe_float(val):
-    try:
-        return float(str(val).replace(" ", "").replace(",", "").strip() or 0)
-    except:
-        return 0
 
 def format_money(amount) -> str:
     try:
@@ -33,13 +26,12 @@ def get_client_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# BOT IMPORT QILADIGAN FUNKSIYALAR
+# Asosiy funksiyalar
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 Telefon raqamingizni yozing:", parse_mode="Markdown")
+    await update.message.reply_text("📝 Telefon raqamingizni kiriting:", parse_mode="Markdown")
     return REGISTER_PHONE
 
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Ro'yxatdan o'tish logikasi
     await update.message.reply_text("✅ Ro'yxatdan o'tildi.", reply_markup=get_client_keyboard())
     return ConversationHandler.END
 
@@ -68,7 +60,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         sale_records = ws_to_records(ws_sales)
         phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
         
-        # FILTR: Faqat "Faol" savdolar
+        # Bekor qilinganlarni filtrlab, faqat faollarini olish
         active_sales = [r for r in sale_records if str(r.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "") == phone_clean and "bekor" not in str(r.get("Holat", "")).lower()]
 
         if not active_sales:
@@ -90,6 +82,5 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 text += f"• {sana} — *{summa} so'm*\n"
         
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
-
     except Exception as e:
-        await update.message.reply_text(f"❌ Xatolik: {e}")
+        await update.message.reply_text(f"❌ Xatolik yuz berdi: {e}")
