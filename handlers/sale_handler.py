@@ -16,7 +16,6 @@ def format_money(amount) -> str:
         return f"{int(float(amount)):,}".replace(",", " ")
     except:
         return str(amount)
-
 def normalize_phone(phone: str) -> str:
     """Telefon raqamini bazaga moslash uchun tozalash"""
     return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()

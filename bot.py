@@ -448,7 +448,7 @@ def main():
     app.add_handler(auction_conv)
 
     # Start
-    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("register", start_register))
 
     # === ADMIN TUGMA HANDLERLARI ===
     app.add_handler(MessageHandler(filters.Regex("^📅 Bugungi To'lovlar$"), cmd_today))
