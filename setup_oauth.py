@@ -7,12 +7,16 @@ Ishlatish:
     python setup_oauth.py
 """
 
+import webbrowser
 import os
 import pickle
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import gspread
 from dotenv import load_dotenv
+
+chrome_path = r'C:\Program Files\Google\Chrome\Application\chrome.exe %s'
+webbrowser.get(chrome_path).open('https://your-auth-url-here')
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
