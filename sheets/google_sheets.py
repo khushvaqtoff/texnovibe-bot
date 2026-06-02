@@ -64,7 +64,7 @@ def get_sheets_client():
     if token_b64:
     	gc = gspread.service_account(filename='credentials.json')
     return gc
-        try:
+try:
             clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
             token_bytes = base64.b64decode(clean)
             creds = pickle.loads(token_bytes)
