@@ -6,6 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from helpers import normalize_phone
 from sheets.google_sheets import add_sale, check_duplicate
+from helpers import normalize_phone
 import os
 
 
