@@ -1,6 +1,5 @@
 """
-TexnoVibe — Mijoz paneli
-Bekor qilingan savdolarni hisobga olmaydigan xatosiz versiya
+Mijoz paneli - Tuzatilgan versiya
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -34,9 +33,16 @@ def get_client_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
+# Import xatosini tuzatish uchun kerakli funksiyalar
+async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📝 *Royxatdan otish*\n\nTelefon raqamingizni yozing:",
+        parse_mode="Markdown"
+    )
+    return REGISTER_PHONE
+
 async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from handlers.registration import start_register
-    return await start_register(update, context)
+    await start_register(update, context)
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_user.id
@@ -50,7 +56,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         phone = next((str(r.get("Telefon", "")) for r in client_records if str(r.get("Chat ID", "")) == str(chat_id)), None)
 
         if not phone:
-            await update.message.reply_text("❌ Siz hali ro'yxatdan o'tmagansiz!", reply_markup=get_client_keyboard())
+            await update.message.reply_text("❌ Siz hali ro'yxatdan o'tmagansiz!")
             return
 
         sale_records = ws_to_records(ws_sales)
@@ -60,7 +66,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         active_sales = [r for r in sale_records if str(r.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "") == phone_clean and "bekor" not in str(r.get("Holat", "")).lower()]
 
         if not active_sales:
-            await update.message.reply_text("📋 Hozirda faol kreditingiz yo'q.", reply_markup=get_client_keyboard())
+            await update.message.reply_text("📋 Hozirda faol kreditingiz yo'q.")
             return
 
         text = f"👤 *Mening Nasiyam*\n📞 `{phone}`\n━━━━━━━━━━━━━━━━━━━━\n"
@@ -72,6 +78,7 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         history = get_payment_history(phone)
         if history:
             text += "📋 *SO'NGGI TO'LOVLAR:*\n"
+            # Sintaksis xatosi tuzatilgan qism
             for rec in history[-5:]:
                 sana = rec.get("To'lov Sanasi", "")
                 summa = format_money(rec.get("To'lov Summasi", 0))
@@ -80,4 +87,4 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Xatolik: `{str(e)}`", parse_mode="Markdown")
+        await update.message.reply_text(f"❌ Xatolik: {e}")
