@@ -62,7 +62,7 @@ def get_sheets_client():
     creds = None
     token_b64 = os.getenv("TOKEN_PICKLE_BASE64")
     if token_b64:
-    gc = gspread.service_account(filename='credentials.json')
+    	gc = gspread.service_account(filename='credentials.json')
     return gc
         try:
             clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
