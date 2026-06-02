@@ -65,11 +65,11 @@ def get_sheets_client():
     	gc = gspread.service_account(filename='credentials.json')
     return gc
 try:
-            clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
-            token_bytes = base64.b64decode(clean)
-            creds = pickle.loads(token_bytes)
-        except Exception as e:
-            logger.error(f"Token o'qishda xato: {e}")
+	clean = token_b64.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", "").replace("\r\n", "").replace("\n", "").replace(" ", "")
+	token_bytes = base64.b64decode(clean)
+	creds = pickle.loads(token_bytes)
+except Exception as e:
+	logger.error(f"Token o'qishda xato: {e}")
 
     if creds is None and os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "rb") as f:
