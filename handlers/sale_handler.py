@@ -5,13 +5,13 @@ Savdo kiritish handleri
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import add_sale, check_duplicate
+from utils import normalize_phone
 import os
 
 NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
     INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, WORK_PLACE, PAY_DAY, CONFIRM = range(11)
 
 def normalize_phone(phone: str) -> str:
-    """Telefon raqamini bazaga moslash uchun tozalash"""
     return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
 
 def format_money(amount) -> str:
@@ -44,13 +44,13 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = update.message.text.strip()
-    clean_phone = normalize_phone(phone)
+    clean_phone = normalize_phone(phone) # Funksiyani shu yerda ishlating
     
     if not clean_phone.isdigit() or len(clean_phone) < 9:
-        await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting (+998xxxxxxxxx):")
+        await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting:")
         return PHONE
 
-    context.user_data["phone"] = clean_phone
+    context.user_data["phone"] = phone
     await update.message.reply_text("⏳ Tekshirilmoqda...")
 
     try:
