@@ -1,6 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 import logging
+REGISTER_PHONE = 1
 
 logger = logging.getLogger(__name__)
 
