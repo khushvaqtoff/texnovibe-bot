@@ -55,9 +55,11 @@ def find_active_sales(phone_or_id: str) -> list[tuple]:
 
 def _sale_card_text(rec: dict) -> str:
     """Bitta savdo ma'lumotlari matni"""
-    jami   = format_money(rec.get("Jami Summa", 0))
-    qoldiq = format_money(rec.get("Qoldiq", 0))
-    avans  = format_money(rec.get("Boshlang'ich To'lov", 0))
+    jami          = format_money(rec.get("Jami Summa", 0))
+    qoldiq        = format_money(rec.get("Qoldiq", 0))
+    avans         = format_money(rec.get("Boshlang'ich To'lov", 0))
+    tolov_turi    = rec.get("To'lov Turi", "")
+    keyingi_tolov = rec.get("Keyingi To'lov Sanasi", "")
 
     return (
         "🔍 *SAVDO TOPILDI*\n"
@@ -70,8 +72,8 @@ def _sale_card_text(rec: dict) -> str:
         f"💵 Jami: *{jami} so'm*\n"
         f"💰 Avans: *{avans} so'm*\n"
         f"📊 Qoldiq: *{qoldiq} so'm*\n"
-        f"📅 To'lov turi: *{rec.get(\"To'lov Turi\", '')}*\n"
-        f"📅 Keyingi to'lov: {rec.get('Keyingi To\'lov Sanasi', '')}\n"
+        f"📅 To'lov turi: *{tolov_turi}*\n"
+        f"📅 Keyingi to'lov: {keyingi_tolov}\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "⚠️ Bu savdoni bekor qilmoqchimisiz?"
     )
