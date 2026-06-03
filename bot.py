@@ -1,6 +1,5 @@
 """
 TexnoVibe Nasiya Bot — Asosiy fayl
-Tuzatildi: CAT_PHOTO state qo'shildi, payment/cancel yangilandi
 """
 
 import logging
@@ -120,9 +119,6 @@ def main():
     bekor_filter = filters.Regex("^🚫 Bekor Qilish$") | filters.Regex("^/bekor$")
     home_filter  = filters.Regex("^🏠 Bosh Menyu$")
 
-    # ══════════════════════════════════════════════
-    # SAVDO KIRITISH
-    # ══════════════════════════════════════════════
     sale_conv = ConversationHandler(
         entry_points=[
             CommandHandler("savdo", start_sale),
@@ -192,9 +188,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # TO'LOV QABUL — tovar tanlash bilan
-    # ══════════════════════════════════════════════
     payment_conv = ConversationHandler(
         entry_points=[
             CommandHandler("tolov", start_payment),
@@ -229,9 +222,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # SAVDONI BEKOR QILISH — tovar tanlash bilan
-    # ══════════════════════════════════════════════
     cancel_sale_conv = ConversationHandler(
         entry_points=[
             CommandHandler("bekorqilish", start_cancel),
@@ -261,9 +251,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # AUKSION
-    # ══════════════════════════════════════════════
     auction_conv = ConversationHandler(
         entry_points=[
             CommandHandler("auksion", start_auction),
@@ -290,9 +277,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # RO'YXATDAN O'TISH
-    # ══════════════════════════════════════════════
     register_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^📝 Ro'yxatdan O'tish$"), start_register),
@@ -312,9 +296,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # KATALOG TOVAR QO'SHISH — CAT_PHOTO STATE TUZATILDI
-    # ══════════════════════════════════════════════
     catalog_add_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product),
@@ -336,11 +317,11 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, cat_get_desc),
             ],
-            CAT_PHOTO: [                                              # ← TUZATILDI
+            CAT_PHOTO: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
-                MessageHandler(filters.PHOTO, cat_get_photo),         # rasm yuborilsa
-                CallbackQueryHandler(cat_skip_photo, pattern="^cat_skip_photo$"),  # o'tkazib yuborish
+                MessageHandler(filters.PHOTO, cat_get_photo),
+                CallbackQueryHandler(cat_skip_photo, pattern="^cat_skip_photo$"),
             ],
             CAT_CONFIRM: [
                 CallbackQueryHandler(cat_confirm),
@@ -356,9 +337,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # BUYURTMA BERISH
-    # ══════════════════════════════════════════════
     order_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^🛒 Buyurtma Berish$"), start_order),
@@ -386,9 +364,6 @@ def main():
         conversation_timeout=300,
     )
 
-    # ══════════════════════════════════════════════
-    # QIDIRUV
-    # ══════════════════════════════════════════════
     search_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^🔍 Qidirish$"), start_search),
@@ -409,9 +384,6 @@ def main():
         conversation_timeout=120,
     )
 
-    # ══════════════════════════════════════════════
-    # HANDLERLARNI QO'SHISH (tartib muhim!)
-    # ══════════════════════════════════════════════
     app.add_handler(register_conv)
     app.add_handler(catalog_add_conv)
     app.add_handler(order_conv)
@@ -423,7 +395,6 @@ def main():
 
     app.add_handler(CommandHandler("start", cmd_start))
 
-    # === ADMIN TUGMALAR ===
     app.add_handler(MessageHandler(filters.Regex("^📅 Bugungi To'lovlar$"),  cmd_today))
     app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar$"),           cmd_clients))
     app.add_handler(MessageHandler(filters.Regex("^📊 Statistika$"),         cmd_stats))
@@ -437,11 +408,8 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🛍 Katalog$"),            cmd_catalog))
     app.add_handler(MessageHandler(filters.Regex("^🛒 Buyurtmalar$"),        cmd_orders))
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"),         cmd_start))
-
-    # === MIJOZ TUGMALAR ===
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"),     cmd_mening_malumotlarim))
 
-    # === BUYRUQLAR ===
     app.add_handler(CommandHandler("register",            cmd_register))
     app.add_handler(CommandHandler("tarix",               cmd_history))
     app.add_handler(CommandHandler("qidir",               cmd_search))
