@@ -481,3 +481,15 @@ def get_client_chat_id(phone: str) -> str:
                 return chat_id
 
     return ""
+ 
+ 
+def get_sheet(sheet_name: str): 
+    import gspread 
+    sh = get_spreadsheet() 
+    try: 
+        return sh.worksheet(sheet_name) 
+    except gspread.exceptions.WorksheetNotFound: 
+        ws = sh.add_worksheet(title=sheet_name, rows=500, cols=10) 
+        if sheet_name == "Katalog": 
+            ws.append_row(["Nom", "Narx", "Tavsif", "PhotoID", "Sana"]) 
+        return ws 
