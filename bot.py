@@ -16,7 +16,7 @@ from handlers.sale_handler import (
     get_total_price, get_payment_type, get_installment_period,
     get_down_payment, get_agent, get_pay_day, confirm_sale, cancel,
     NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE,
-    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, CONFIRM
+    INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, START_MONTH, CONFIRM
 )
 from handlers.payment_handler import (
     start_payment, payment_phone, payment_select, payment_amount, payment_confirm,
@@ -171,6 +171,9 @@ def main():
             PAY_DAY: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_pay_day),
+            ],
+            START_MONTH: [
                 CallbackQueryHandler(get_pay_day),
             ],
             CONFIRM: [
