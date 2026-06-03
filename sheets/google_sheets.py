@@ -66,22 +66,21 @@ def get_sheets_client():
 
     # 3. Token yangilash yoki yangi login
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Yangilangan tokenni saqlash
-            with open(TOKEN_FILE, "wb") as f:
-                pickle.dump(creds, f)
-        elif os.path.exists(CREDENTIALS_FILE):
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
-            with open(TOKEN_FILE, "wb") as f:
-                pickle.dump(creds, f)
-        else:
-            raise Exception(
-                "Token topilmadi! TOKEN_PICKLE_BASE64 yoki credentials.json kerak."
-            )
+    	try:
+       	    if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
 
-    return gspread.authorize(creds)
+                with open(TOKEN_FILE, "wb") as f:
+                    pickle.dump(creds, f)
+
+        except Exception as e:
+            print(f"Token yangilashda xato: {e}")
+            creds = None
+
+    if creds is None:
+        raise Exception(
+            "Google token eskirgan. TOKEN_PICKLE_BASE64 ni qayta yarating."
+        )
 
 
 def get_spreadsheet():
