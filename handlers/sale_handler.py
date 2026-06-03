@@ -233,12 +233,20 @@ async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Katalogdan narx olindi edi
         if context.user_data.get("_catalog_price"):
             price = context.user_data["_catalog_price"]
-            context.user_data["total_price"] = price
+            # Narxni saqlash — lekin foydalanuvchi o'zgartira oladi
+            keyboard = [[
+                InlineKeyboardButton(
+                    f"✅ Ha, {format_money(price)} so'm",
+                    callback_data="price_confirm"
+                ),
+                InlineKeyboardButton("✏️ Narxni o'zgartirish", callback_data="price_change")
+            ]]
             await update.message.reply_text(
                 f"✅ Ish joyi: {work_place or 'Korsatilmagan'}\n"
-                f"💵 Narx katalogdan: *{format_money(price)} so'm*\n\n"
-                "5️⃣ Jami narxni tasdiqlang yoki yangi narx kiriting:",
-                parse_mode="Markdown"
+                f"💵 Katalog narxi: *{format_money(price)} so'm*\n\n"
+                "5️⃣ Shu narxda davom etasizmi?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
         else:
             await update.message.reply_text(
@@ -246,7 +254,7 @@ async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "5️⃣ Tovarning jami narxini kiriting (so'mda):\n_(Masalan: 3500000)_",
                 parse_mode="Markdown"
             )
-        return PAYMENT_TYPE
+        return TOTAL_PRICE
 
     # Bu narx
     try:
@@ -276,6 +284,28 @@ async def get_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         query = update.callback_query
         await query.answer()
+
+        # Narx tasdiqlash yoki o'zgartirish
+        if query.data == "price_confirm":
+            price = context.user_data.get("_catalog_price", 0)
+            context.user_data["total_price"] = price
+            await query.edit_message_text(
+                f"✅ Narx tasdiqlandi: *{format_money(price)} so'm*\n\n"
+                "6️⃣ To'lov turini tanlang:",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📅 Oylik", callback_data="pay_monthly"),
+                    InlineKeyboardButton("📆 Haftalik", callback_data="pay_weekly")
+                ]])
+            )
+            return PAYMENT_TYPE
+
+        if query.data == "price_change":
+            await query.edit_message_text(
+                "✏️ Yangi narxni kiriting (so'mda):\n_(Masalan: 3500000)_",
+                parse_mode="Markdown"
+            )
+            return TOTAL_PRICE
 
         if query.data in ["pay_monthly", "pay_weekly"]:
             pay_type    = "Oylik" if query.data == "pay_monthly" else "Haftalik"
