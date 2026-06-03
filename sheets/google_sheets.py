@@ -66,13 +66,11 @@ def get_sheets_client():
 
     # 3. Token yangilash yoki yangi login
     if not creds or not creds.valid:
-    	try:
-       	    if creds and creds.expired and creds.refresh_token:
+        try:
+            if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
-
                 with open(TOKEN_FILE, "wb") as f:
                     pickle.dump(creds, f)
-
         except Exception as e:
             print(f"Token yangilashda xato: {e}")
             creds = None
@@ -81,6 +79,8 @@ def get_sheets_client():
         raise Exception(
             "Google token eskirgan. TOKEN_PICKLE_BASE64 ni qayta yarating."
         )
+
+    return gspread.authorize(creds)
 
 
 def get_spreadsheet():
