@@ -1,6 +1,6 @@
 """
 TexnoVibe Nasiya Bot — Asosiy fayl
-Admin va Mijoz uchun alohida keyboard menyu
+Tuzatildi: CAT_PHOTO state qo'shildi, payment/cancel yangilandi
 """
 
 import logging
@@ -11,6 +11,7 @@ from telegram.ext import (
     CallbackQueryHandler, ConversationHandler, filters
 )
 from dotenv import load_dotenv
+
 from handlers.sale_handler import (
     start_sale, get_name, get_phone, get_product,
     get_total_price, get_payment_type, get_installment_period,
@@ -19,8 +20,8 @@ from handlers.sale_handler import (
     INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, CONFIRM
 )
 from handlers.payment_handler import (
-    start_payment, payment_phone, payment_amount, payment_confirm,
-    PAY_PHONE, PAY_AMOUNT, PAY_CONFIRM
+    start_payment, payment_phone, payment_select, payment_amount, payment_confirm,
+    PAY_PHONE, PAY_SELECT, PAY_AMOUNT, PAY_CONFIRM
 )
 from handlers.query_handler import (
     cmd_history, cmd_search, cmd_debtors, cmd_blacklist,
@@ -34,8 +35,8 @@ from handlers.auction_handler import (
 from handlers.admin_handler import cmd_export, cmd_backup, cmd_clients_db
 from handlers.report_handler import cmd_daily_report, cmd_warehouse, cmd_excel_export
 from handlers.cancel_sale_handler import (
-    start_cancel, cancel_search, cancel_confirm, cancel_cmd,
-    CANCEL_SEARCH, CANCEL_CONFIRM
+    start_cancel, cancel_search, cancel_select, cancel_confirm, cancel_cmd,
+    CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM
 )
 from handlers.client_panel import (
     cmd_mening_malumotlarim, cmd_register,
@@ -44,8 +45,9 @@ from handlers.client_panel import (
 )
 from handlers.catalog_handler import (
     start_add_product, cat_get_name, cat_get_price,
-    cat_get_desc, cat_confirm, cmd_catalog, cmd_remove_product,
-    CAT_NAME, CAT_PRICE, CAT_DESC, CAT_CONFIRM
+    cat_get_desc, cat_get_photo, cat_skip_photo, cat_confirm,
+    cmd_catalog, cmd_remove_product,
+    CAT_NAME, CAT_PRICE, CAT_DESC, CAT_PHOTO, CAT_CONFIRM
 )
 from handlers.order_handler import (
     start_order, order_select, order_workplace, order_confirm, cancel_order,
@@ -70,24 +72,22 @@ def is_admin(user_id: int) -> bool:
 
 
 def get_admin_keyboard():
-    """Admin uchun pastki menyu"""
     keyboard = [
-        [KeyboardButton("➕ Yangi Savdo"), KeyboardButton("💰 To'lov Qabul")],
-        [KeyboardButton("❌ Bekor Qilish"), KeyboardButton("📅 Bugungi To'lovlar")],
-        [KeyboardButton("👥 Mijozlar"), KeyboardButton("📊 Statistika")],
-        [KeyboardButton("⚠️ Qarzdorlar"), KeyboardButton("🚫 Qora Ro'yxat")],
-        [KeyboardButton("⭐ Reyting"), KeyboardButton("🔍 Qidirish")],
-        [KeyboardButton("🎯 Auksion"), KeyboardButton("📥 Excel Eksport")],
-        [KeyboardButton("📦 Tovar Qoshish"), KeyboardButton("🛍 Katalog")],
-        [KeyboardButton("🛒 Buyurtmalar"), KeyboardButton("👥 Mijozlar Bazasi")],
-        [KeyboardButton("📈 Bugungi Hisobot"), KeyboardButton("🏭 Ombor Nazorati")],
+        [KeyboardButton("➕ Yangi Savdo"),      KeyboardButton("💰 To'lov Qabul")],
+        [KeyboardButton("❌ Bekor Qilish"),      KeyboardButton("📅 Bugungi To'lovlar")],
+        [KeyboardButton("👥 Mijozlar"),           KeyboardButton("📊 Statistika")],
+        [KeyboardButton("⚠️ Qarzdorlar"),        KeyboardButton("🚫 Qora Ro'yxat")],
+        [KeyboardButton("⭐ Reyting"),            KeyboardButton("🔍 Qidirish")],
+        [KeyboardButton("🎯 Auksion"),            KeyboardButton("📥 Excel Eksport")],
+        [KeyboardButton("📦 Tovar Qoshish"),      KeyboardButton("🛍 Katalog")],
+        [KeyboardButton("🛒 Buyurtmalar"),        KeyboardButton("👥 Mijozlar Bazasi")],
+        [KeyboardButton("📈 Bugungi Hisobot"),    KeyboardButton("🏭 Ombor Nazorati")],
         [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
 def get_client_keyboard():
-    """Mijoz uchun pastki menyu"""
     keyboard = [
         [KeyboardButton("📊 Mening Nasiyam")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
@@ -98,52 +98,31 @@ def get_client_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
-# ✅ FIX 1: cmd_start main()dan OLDIN aniqlandi
 async def cmd_start(update: Update, context):
     user_id = update.effective_user.id
     if is_admin(user_id):
-        text = (
-            "🏪 *TexnoVibe Nasiya Bot — Admin Panel*\n\n"
-            "Quyidagi tugmalardan foydalaning 👇"
-        )
         await update.message.reply_text(
-            text,
+            "🏪 *TexnoVibe Nasiya Bot — Admin Panel*\n\nQuyidagi tugmalardan foydalaning 👇",
             parse_mode="Markdown",
             reply_markup=get_admin_keyboard()
         )
     else:
-        text = (
-            "🏪 *TexnoVibe Nasiya Bot*\n\n"
-            "Assalomu alaykum! 👋\n"
-            "Quyidagi tugmalardan foydalaning 👇"
-        )
         await update.message.reply_text(
-            text,
+            "🏪 *TexnoVibe Nasiya Bot*\n\nAssalomu alaykum! 👋\nQuyidagi tugmalardan foydalaning 👇",
             parse_mode="Markdown",
             reply_markup=get_client_keyboard()
         )
-
-
-async def cmd_search_prompt(update: Update, context):
-    """Qidirish tugmasi bosilganda"""
-    await update.message.reply_text(
-        "🔍 *Qidirish*\n\n"
-        "Ism yoki telefon bo'yicha:\n"
-        "`/qidir Anvarov`\n"
-        "`/qidir +998901234567`\n\n"
-        "To'lov tarixi:\n"
-        "`/tarix +998901234567`",
-        parse_mode="Markdown"
-    )
 
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     bekor_filter = filters.Regex("^🚫 Bekor Qilish$") | filters.Regex("^/bekor$")
-    home_filter = filters.Regex("^🏠 Bosh Menyu$")
+    home_filter  = filters.Regex("^🏠 Bosh Menyu$")
 
-    # === SAVDO KIRITISH ===
+    # ══════════════════════════════════════════════
+    # SAVDO KIRITISH
+    # ══════════════════════════════════════════════
     sale_conv = ConversationHandler(
         entry_points=[
             CommandHandler("savdo", start_sale),
@@ -213,7 +192,9 @@ def main():
         conversation_timeout=300,
     )
 
-    # === TO'LOV QABUL QILISH ===
+    # ══════════════════════════════════════════════
+    # TO'LOV QABUL — tovar tanlash bilan
+    # ══════════════════════════════════════════════
     payment_conv = ConversationHandler(
         entry_points=[
             CommandHandler("tolov", start_payment),
@@ -224,6 +205,9 @@ def main():
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, payment_phone),
+            ],
+            PAY_SELECT: [
+                CallbackQueryHandler(payment_select, pattern="^paysel_"),
             ],
             PAY_AMOUNT: [
                 MessageHandler(home_filter, cancel),
@@ -245,7 +229,9 @@ def main():
         conversation_timeout=300,
     )
 
-    # === SAVDONI BEKOR QILISH ===
+    # ══════════════════════════════════════════════
+    # SAVDONI BEKOR QILISH — tovar tanlash bilan
+    # ══════════════════════════════════════════════
     cancel_sale_conv = ConversationHandler(
         entry_points=[
             CommandHandler("bekorqilish", start_cancel),
@@ -256,6 +242,9 @@ def main():
                 MessageHandler(home_filter, cancel_cmd),
                 MessageHandler(bekor_filter, cancel_cmd),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, cancel_search),
+            ],
+            CANCEL_SELECT: [
+                CallbackQueryHandler(cancel_select, pattern="^cnlsel_"),
             ],
             CANCEL_CONFIRM: [
                 MessageHandler(home_filter, cancel_cmd),
@@ -272,7 +261,9 @@ def main():
         conversation_timeout=300,
     )
 
-    # === AUKSION ===
+    # ══════════════════════════════════════════════
+    # AUKSION
+    # ══════════════════════════════════════════════
     auction_conv = ConversationHandler(
         entry_points=[
             CommandHandler("auksion", start_auction),
@@ -299,7 +290,9 @@ def main():
         conversation_timeout=300,
     )
 
-    # === ROYXATDAN OTISH (mijoz) ===
+    # ══════════════════════════════════════════════
+    # RO'YXATDAN O'TISH
+    # ══════════════════════════════════════════════
     register_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^📝 Ro'yxatdan O'tish$"), start_register),
@@ -319,7 +312,9 @@ def main():
         conversation_timeout=300,
     )
 
-    # === KATALOG QOSHISH (admin) ===
+    # ══════════════════════════════════════════════
+    # KATALOG TOVAR QO'SHISH — CAT_PHOTO STATE TUZATILDI
+    # ══════════════════════════════════════════════
     catalog_add_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product),
@@ -341,6 +336,12 @@ def main():
                 MessageHandler(bekor_filter, cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, cat_get_desc),
             ],
+            CAT_PHOTO: [                                              # ← TUZATILDI
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                MessageHandler(filters.PHOTO, cat_get_photo),         # rasm yuborilsa
+                CallbackQueryHandler(cat_skip_photo, pattern="^cat_skip_photo$"),  # o'tkazib yuborish
+            ],
             CAT_CONFIRM: [
                 CallbackQueryHandler(cat_confirm),
                 MessageHandler(home_filter, cancel),
@@ -349,12 +350,15 @@ def main():
         fallbacks=[
             CommandHandler("bekor", cancel),
             CommandHandler("start", cancel),
+            MessageHandler(bekor_filter, cancel),
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
     )
 
-    # === BUYURTMA BERISH (mijoz) ===
+    # ══════════════════════════════════════════════
+    # BUYURTMA BERISH
+    # ══════════════════════════════════════════════
     order_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^🛒 Buyurtma Berish$"), start_order),
@@ -382,7 +386,9 @@ def main():
         conversation_timeout=300,
     )
 
-    # === QIDIRISH CONVERSATION ===
+    # ══════════════════════════════════════════════
+    # QIDIRUV
+    # ══════════════════════════════════════════════
     search_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^🔍 Qidirish$"), start_search),
@@ -403,7 +409,9 @@ def main():
         conversation_timeout=120,
     )
 
-    # === HANDLERLARNI QO'SHISH ===
+    # ══════════════════════════════════════════════
+    # HANDLERLARNI QO'SHISH (tartib muhim!)
+    # ══════════════════════════════════════════════
     app.add_handler(register_conv)
     app.add_handler(catalog_add_conv)
     app.add_handler(order_conv)
@@ -413,52 +421,46 @@ def main():
     app.add_handler(cancel_sale_conv)
     app.add_handler(auction_conv)
 
-    # Start
     app.add_handler(CommandHandler("start", cmd_start))
 
-    # === ADMIN TUGMA HANDLERLARI ===
-    app.add_handler(MessageHandler(filters.Regex("^📅 Bugungi To'lovlar$"), cmd_today))
-    app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar$"), cmd_clients))
-    app.add_handler(MessageHandler(filters.Regex("^📊 Statistika$"), cmd_stats))
-    app.add_handler(MessageHandler(filters.Regex("^⚠️ Qarzdorlar$"), cmd_debtors))
-    app.add_handler(MessageHandler(filters.Regex("^🚫 Qora Ro'yxat$"), cmd_blacklist))
-    app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"), cmd_rating))
-    app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"), cmd_excel_export))
+    # === ADMIN TUGMALAR ===
+    app.add_handler(MessageHandler(filters.Regex("^📅 Bugungi To'lovlar$"),  cmd_today))
+    app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar$"),           cmd_clients))
+    app.add_handler(MessageHandler(filters.Regex("^📊 Statistika$"),         cmd_stats))
+    app.add_handler(MessageHandler(filters.Regex("^⚠️ Qarzdorlar$"),        cmd_debtors))
+    app.add_handler(MessageHandler(filters.Regex("^🚫 Qora Ro'yxat$"),      cmd_blacklist))
+    app.add_handler(MessageHandler(filters.Regex("^⭐ Reyting$"),            cmd_rating))
+    app.add_handler(MessageHandler(filters.Regex("^📥 Excel Eksport$"),      cmd_excel_export))
+    app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar Bazasi$"),    cmd_clients_db))
+    app.add_handler(MessageHandler(filters.Regex("^📈 Bugungi Hisobot$"),    cmd_daily_report))
+    app.add_handler(MessageHandler(filters.Regex("^🏭 Ombor Nazorati$"),     cmd_warehouse))
+    app.add_handler(MessageHandler(filters.Regex("^🛍 Katalog$"),            cmd_catalog))
+    app.add_handler(MessageHandler(filters.Regex("^🛒 Buyurtmalar$"),        cmd_orders))
+    app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"),         cmd_start))
 
-    # === BOX MENYU HANDLERI ===
-    app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"), cmd_start))
-
-    # === MIJOZ TUGMA HANDLERLARI ===
-    app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"), cmd_mening_malumotlarim))
-
-    # ✅ FIX 3: cmd_register handler qo'shildi
-    app.add_handler(CommandHandler("register", cmd_register))
+    # === MIJOZ TUGMALAR ===
+    app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"),     cmd_mening_malumotlarim))
 
     # === BUYRUQLAR ===
-    app.add_handler(CommandHandler("tarix", cmd_history))
-    app.add_handler(CommandHandler("qidir", cmd_search))
-    app.add_handler(CommandHandler("qarzdorlar", cmd_debtors))
-    app.add_handler(CommandHandler("qoralist", cmd_blacklist))
-    app.add_handler(CommandHandler("reyting", cmd_rating))
-    app.add_handler(CommandHandler("mijozlar", cmd_clients))
-    app.add_handler(CommandHandler("bugun", cmd_today))
-    app.add_handler(CommandHandler("statistika", cmd_stats))
-    app.add_handler(CommandHandler("eksport", cmd_excel_export))
-    app.add_handler(CommandHandler("backup", cmd_backup))
-    app.add_handler(CommandHandler("auksion_tugat", auction_end_cmd))
+    app.add_handler(CommandHandler("register",            cmd_register))
+    app.add_handler(CommandHandler("tarix",               cmd_history))
+    app.add_handler(CommandHandler("qidir",               cmd_search))
+    app.add_handler(CommandHandler("qarzdorlar",          cmd_debtors))
+    app.add_handler(CommandHandler("qoralist",            cmd_blacklist))
+    app.add_handler(CommandHandler("reyting",             cmd_rating))
+    app.add_handler(CommandHandler("mijozlar",            cmd_clients))
+    app.add_handler(CommandHandler("bugun",               cmd_today))
+    app.add_handler(CommandHandler("statistika",          cmd_stats))
+    app.add_handler(CommandHandler("eksport",             cmd_excel_export))
+    app.add_handler(CommandHandler("backup",              cmd_backup))
+    app.add_handler(CommandHandler("auksion_tugat",       auction_end_cmd))
     app.add_handler(CommandHandler("mening_malumotlarim", cmd_mening_malumotlarim))
-    app.add_handler(CommandHandler("mijozlarbazasi", cmd_clients_db))
-    app.add_handler(MessageHandler(filters.Regex("^👥 Mijozlar Bazasi$"), cmd_clients_db))
-    app.add_handler(CommandHandler("hisobot", cmd_daily_report))
-    app.add_handler(CommandHandler("ombor", cmd_warehouse))
-    app.add_handler(MessageHandler(filters.Regex("^📈 Bugungi Hisobot$"), cmd_daily_report))
-    app.add_handler(MessageHandler(filters.Regex("^🏭 Ombor Nazorati$"), cmd_warehouse))
-    app.add_handler(CommandHandler("katalog", cmd_catalog))
-    app.add_handler(CommandHandler("tovarchiqar", cmd_remove_product))
-    app.add_handler(MessageHandler(filters.Regex("^📦 Tovar Qoshish$"), start_add_product))
-    app.add_handler(MessageHandler(filters.Regex("^🛍 Katalog$"), cmd_catalog))
-    app.add_handler(MessageHandler(filters.Regex("^🛒 Buyurtmalar$"), cmd_orders))
-    app.add_handler(CommandHandler("buyurtmalar", cmd_orders))
+    app.add_handler(CommandHandler("mijozlarbazasi",      cmd_clients_db))
+    app.add_handler(CommandHandler("hisobot",             cmd_daily_report))
+    app.add_handler(CommandHandler("ombor",               cmd_warehouse))
+    app.add_handler(CommandHandler("katalog",             cmd_catalog))
+    app.add_handler(CommandHandler("tovarchiqar",         cmd_remove_product))
+    app.add_handler(CommandHandler("buyurtmalar",         cmd_orders))
 
     setup_scheduler(app)
 
