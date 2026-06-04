@@ -145,6 +145,7 @@ def main():
             TOTAL_PRICE: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_payment_type, pattern="^price_"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_total_price),
             ],
             PAYMENT_TYPE: [
