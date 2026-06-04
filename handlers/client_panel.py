@@ -1,5 +1,8 @@
 """
 Mijoz paneli
+Tuzatildi:
+  - Bekor qilingan savdolar ko'rsatilmaydi
+  - To'lovlar tarixi to'g'ri ustundan o'qiladi
 """
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -12,6 +15,7 @@ from datetime import date
 import os
 
 REGISTER_PHONE = 40
+
 
 def safe_float(val):
     try:
@@ -39,7 +43,6 @@ def get_client_keyboard():
 
 
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ro'yxatdan o'tish — telefon so'raydi"""
     await update.message.reply_text(
         "📝 *Royxatdan otish*\n\n"
         "Telefon raqamingizni yozing:\n"
@@ -50,40 +53,31 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Telefon raqamini qabul qiladi va bazada tekshiradi"""
     phone_input = update.message.text.strip()
-    user = update.effective_user
-    chat_id = user.id
-    username = user.username or ""
+    user        = update.effective_user
+    chat_id     = user.id
+    username    = user.username or ""
 
-    # Telefon raqamini tozalash
     phone_clean = phone_input.replace("+", "").replace(" ", "").replace("-", "")
-
     if not phone_clean.isdigit() or len(phone_clean) < 9:
         await update.message.reply_text(
-            "❌ Telefon raqami noto'g'ri.\n"
-            "Qaytadan kiriting:\n"
-            "_(Masalan: 998901234567)_",
+            "❌ Telefon raqami noto'g'ri.\nQaytadan kiriting:\n_(Masalan: 998901234567)_",
             parse_mode="Markdown"
         )
         return REGISTER_PHONE
 
-    # + qo'shish
-    if not phone_input.startswith("+"):
-        phone = "+" + phone_clean
-    else:
-        phone = phone_input
+    phone = ("+" + phone_clean) if not phone_input.startswith("+") else phone_input
 
     try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws_sales = sheets["Savdolar"]
-        records = ws_to_records(ws_sales)
+        sh      = get_spreadsheet()
+        sheets  = ensure_worksheets(sh)
+        records = ws_to_records(sheets["Savdolar"])
 
         found_rec = None
         for rec in records:
             rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
-            if rec_phone == phone_clean and rec.get("Holat") == "Faol":
+            holat     = str(rec.get("Holat", "")).strip()
+            if rec_phone == phone_clean and holat == "Faol":
                 found_rec = rec
                 break
 
@@ -91,18 +85,16 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"❌ `{phone}` raqami bazada topilmadi.\n\n"
                 "Telefon raqamingiz to'g'riligini tekshiring\n"
-                "yoki do'konimizga murojaat qiling.\n\n"
-                "Qaytadan kiriting:",
+                "yoki do'konimizga murojaat qiling.\n\nQaytadan kiriting:",
                 parse_mode="Markdown"
             )
             return REGISTER_PHONE
 
-        # Chat ID ni saqlash
         save_client_chat_id(phone, chat_id, username)
 
-        fio = found_rec.get("FIO", "")
-        tovar = found_rec.get("Tovar", "")
-        qoldiq = format_money(found_rec.get("Qoldiq", 0))
+        fio     = found_rec.get("FIO", "")
+        tovar   = found_rec.get("Tovar", "")
+        qoldiq  = format_money(found_rec.get("Qoldiq", 0))
         keyingi = found_rec.get("Keyingi To'lov Sanasi", "")
 
         await update.message.reply_text(
@@ -120,29 +112,21 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        await update.message.reply_text(
-            f"❌ Xatolik: `{str(e)}`",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text(f"❌ Xatolik: `{str(e)}`", parse_mode="Markdown")
 
     context.user_data.clear()
     return ConversationHandler.END
 
 
 async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🏠 Bosh menyuga qaytildi.",
-        reply_markup=get_client_keyboard()
-    )
+    await update.message.reply_text("🏠 Bosh menyuga qaytildi.", reply_markup=get_client_keyboard())
     context.user_data.clear()
     return ConversationHandler.END
 
 
 async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/royhattan_otish buyrug'i"""
     args = context.args
     if args:
-        # Argument bilan kelsa — bevosita ro'yxatdan o'tkazish
         context.args = args
         await register_phone(update, context)
     else:
@@ -150,47 +134,42 @@ async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/mening_malumotlarim"""
     chat_id = update.effective_user.id
 
     try:
-        sh = get_spreadsheet()
-        sheets = ensure_worksheets(sh)
-        ws_clients = sheets["Mijozlar"]
-        ws_sales = sheets["Savdolar"]
+        sh      = get_spreadsheet()
+        sheets  = ensure_worksheets(sh)
 
-        client_records = ws_to_records(ws_clients)
+        # Mijozni topish
         phone = None
-        fio = None
-
-        for rec in client_records:
+        fio   = None
+        for rec in ws_to_records(sheets["Mijozlar"]):
             if str(rec.get("Chat ID", "")).strip() == str(chat_id):
                 phone = str(rec.get("Telefon", ""))
-                fio = rec.get("FIO", "")
+                fio   = rec.get("FIO", "")
                 break
 
         if not phone:
             await update.message.reply_text(
-                "❌ Siz hali royxatdan otmagansiz!\n\n"
-                "Royxatdan otish tugmasini bosing.",
+                "❌ Siz hali royxatdan otmagansiz!\n\nRoyxatdan otish tugmasini bosing.",
                 reply_markup=get_client_keyboard()
             )
             return
 
-        sale_records = ws_to_records(ws_sales)
         phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
-        active_sales = []
 
-        for rec in sale_records:
+        # Savdolarni olish — FAQAT faol va yopilgan (bekor qilinganlar chiqmaydi)
+        all_sales = ws_to_records(sheets["Savdolar"])
+        korsatish = []
+        for rec in all_sales:
             rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
-            if rec_phone == phone_clean:
-                active_sales.append(rec)
+            holat     = str(rec.get("Holat", "")).strip()
+            if rec_phone == phone_clean and holat != "Bekor qilindi":
+                korsatish.append(rec)
 
-        if not active_sales:
+        if not korsatish:
             await update.message.reply_text(
-                f"👤 *{fio}*\n\n"
-                "📋 Hozirda faol kreditingiz yoq.\n\n"
-                "🏪 TexnoVibe",
+                f"👤 *{fio}*\n\n📋 Hozirda faol kreditingiz yo'q.\n\n🏪 TexnoVibe",
                 parse_mode="Markdown",
                 reply_markup=get_client_keyboard()
             )
@@ -198,44 +177,54 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
         text = f"👤 *{fio}*\n📞 `{phone}`\n━━━━━━━━━━━━━━━━━━━━\n"
 
-        for rec in active_sales:
-            holat = rec.get("Holat", "")
+        for rec in korsatish:
+            holat = str(rec.get("Holat", "")).strip()
             if holat == "Yopildi":
                 holat_emoji = "✅"
-            elif holat == "Bekor qilindi":
-                holat_emoji = "❌"
             else:
                 holat_emoji = "🔄"
 
-            tovar = rec.get("Tovar", "")
-            jami = format_money(rec.get("Jami Summa", 0))
-            qoldiq = format_money(rec.get("Qoldiq", 0))
-            tolov_turi = rec.get("To'lov Turi", "")
-            tolov_summasi = format_money(rec.get("To'lov Summasi", 0))
-            keyingi = rec.get("Keyingi To'lov Sanasi", "")
-            reyting = rec.get("Reyting", "")
-            bonus = format_money(rec.get("Kredit Bonusu", 0))
+            tovar        = rec.get("Tovar", "")
+            jami         = format_money(rec.get("Jami Summa", 0))
+            qoldiq       = format_money(rec.get("Qoldiq", 0))
+            tolov_turi   = rec.get("To'lov Turi", "")
+            # Oylik to'lov miqdori
+            oylik        = format_money(rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)))
+            keyingi      = rec.get("Keyingi To'lov Sanasi", "")
+            reyting      = rec.get("Reyting", "")
+            bonus        = format_money(rec.get("Kredit Bonusu", 0))
+            tolangan     = format_money(rec.get("To'langan Summa", 0))
 
             text += (
                 f"{holat_emoji} *{tovar}*\n"
                 f"💵 Jami: *{jami} so'm*\n"
+                f"✅ To'langan: *{tolangan} so'm*\n"
                 f"💰 Qoldiq: *{qoldiq} so'm*\n"
-                f"📅 {tolov_turi} | 💳 {tolov_summasi} so'm\n"
+                f"📅 {tolov_turi} | 💳 Oylik: *{oylik} so'm*\n"
                 f"📆 Keyingi to'lov: *{keyingi}*\n"
                 f"⭐ Reyting: {reyting}\n"
                 f"🎁 Bonus: *{bonus} so'm*\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
             )
 
-        history = get_payment_history(phone)
-        if history:
-            total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in history)
-            text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
-            for rec in history[-5:]:
-                sana = rec.get("To'lov Sanasi", "")
-                summa = format_money(rec.get("To'lov Summasi", 0))
-                text += f"• {sana} — *{summa} so'm*\n"
-            text += f"\n✅ Jami tolangan: *{format_money(total_paid)} so'm*\n"
+        # To'lovlar tarixi — Tolovlar varag'idan
+        try:
+            tolovlar = ws_to_records(sheets["Tolovlar"])
+            mijoz_tolovlar = [
+                r for r in tolovlar
+                if str(r.get("Telefon", "")).replace("+","").replace(" ","").replace("-","") == phone_clean
+            ]
+            if mijoz_tolovlar:
+                # To'lov Summasi ustuni Tolovlar varag'ida
+                total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in mijoz_tolovlar)
+                text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
+                for r in mijoz_tolovlar[-5:]:
+                    sana  = r.get("To'lov Sanasi", "")
+                    summa = format_money(r.get("To'lov Summasi", 0))
+                    text += f"• {sana} — *{summa} so'm*\n"
+                text += f"\n✅ Jami to'langan: *{format_money(total_paid)} so'm*\n"
+        except Exception:
+            pass
 
         text += "\n🏪 TexnoVibe"
 
@@ -246,7 +235,4 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         )
 
     except Exception as e:
-        await update.message.reply_text(
-            f"❌ Xatolik: `{str(e)}`",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text(f"❌ Xatolik: `{str(e)}`", parse_mode="Markdown")
