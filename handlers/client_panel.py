@@ -5,7 +5,7 @@ Yangilik:
   - Kontakt tugmasi bilan avtomatik telefon yuborish
 """
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, KeyboardButtonRequestContact
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
     get_spreadsheet, ensure_worksheets,
