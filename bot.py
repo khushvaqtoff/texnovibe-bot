@@ -50,7 +50,7 @@ from handlers.catalog_handler import (
 )
 from handlers.order_handler import (
     start_order, order_select, order_workplace, order_confirm, cancel_order,
-    cmd_orders, ORDER_SELECT, ORDER_WORKPLACE, ORDER_CONFIRM
+    cmd_orders, order_done_callback, ORDER_SELECT, ORDER_WORKPLACE, ORDER_CONFIRM
 )
 from scheduler.reminder import setup_scheduler
 
@@ -434,6 +434,9 @@ def main():
     app.add_handler(CommandHandler("katalog",             cmd_catalog))
     app.add_handler(CommandHandler("tovarchiqar",         cmd_remove_product))
     app.add_handler(CommandHandler("buyurtmalar",         cmd_orders))
+
+    # Buyurtma yetkazildi callback
+    app.add_handler(CallbackQueryHandler(order_done_callback, pattern="^ord_done_"))
 
     setup_scheduler(app)
 

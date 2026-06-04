@@ -591,6 +591,16 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # start_month ni google_sheets ga uzatish
         result = add_sale(context.user_data)
 
+        # Buyurtma bo'lsa avtomatik "Yetkazildi" ga o'tkazish
+        try:
+            from handlers.order_handler import auto_complete_order
+            auto_complete_order(
+                phone=context.user_data.get("phone", ""),
+                product_name=context.user_data.get("product", "")
+            )
+        except Exception:
+            pass
+
         schedule_text = "📅 TO'LOV JADVALI:\n"
         for item in result["schedule"][:6]:
             schedule_text += (
