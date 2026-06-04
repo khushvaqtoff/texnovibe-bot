@@ -220,6 +220,34 @@ async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── 5. ISH JOYI VA NARX ────────────────────────────────────
 async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Callback — price_confirm yoki price_change
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+
+        if query.data == "price_confirm":
+            price = context.user_data.get("_catalog_price", 0)
+            context.user_data["total_price"] = price
+            await query.edit_message_text(
+                f"✅ Narx tasdiqlandi: *{format_money(price)} so'm*\n\n"
+                "6️⃣ To'lov turini tanlang:",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📅 Oylik",    callback_data="pay_monthly"),
+                    InlineKeyboardButton("📆 Haftalik", callback_data="pay_weekly")
+                ]])
+            )
+            return PAYMENT_TYPE
+
+        if query.data == "price_change":
+            await query.edit_message_text(
+                "✏️ Yangi narxni kiriting (so'mda):\n_(Masalan: 3500000)_",
+                parse_mode="Markdown"
+            )
+            return TOTAL_PRICE
+
+        return TOTAL_PRICE
+
     text = update.message.text.strip()
 
     # Ish joyi kiritilganmi yoki narxmi?
