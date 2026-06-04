@@ -41,7 +41,7 @@ def get_active_sales_by_phone(phone: str) -> list[dict]:
                 "id":        rec.get("ID", f"qator-{i}"),
                 "tovar":     rec.get("Tovar", "Noma'lum tovar"),
                 "qoldiq":    rec.get("Qoldiq", 0),
-                "oylik":     rec.get("Oylik To'lov", 0),
+                "oylik":     rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)),
                 "fio":       rec.get("FIO", ""),
             })
 

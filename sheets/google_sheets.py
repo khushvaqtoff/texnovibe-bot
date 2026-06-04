@@ -220,14 +220,13 @@ def normalize_phone(phone: str) -> str:
     return p
 
 
-def record_payment(phone: str, amount: float) -> dict:
+def record_payment(phone: str, amount: float, row_index: int = None) -> dict:
     sh = get_spreadsheet()
     sheets = ensure_worksheets(sh)
     ws_sales = sheets["Savdolar"]
     ws_payments = sheets["Tolovlar"]
     all_values = ws_sales.get_all_values()
     target_row = None
-    row_index = None
     phone_clean = normalize_phone(phone)
 
     if len(all_values) < 2:
@@ -241,18 +240,27 @@ def record_payment(phone: str, amount: float) -> dict:
         except ValueError:
             return -1
 
-    for i, row in enumerate(all_values[1:], start=2):
-        def get(name, default=""):
-            idx = col(name)
-            if idx < 0 or idx >= len(row):
-                return default
-            return row[idx] if row[idx] != "" else default
+    # row_index berilgan bo'lsa — to'g'ridan o'sha qatorni ol
+    if row_index is not None:
+        row = all_values[row_index - 1]
+        target_row = {h: (row[j] if j < len(row) else "") for j, h in enumerate(headers)}
+        if normalize_phone(target_row.get("Telefon", "")) != phone_clean:
+            return {"success": False, "error": "Telefon va qator mos kelmadi"}
+        if target_row.get("Holat") != "Faol":
+            return {"success": False, "error": "Bu savdo faol emas"}
+    else:
+        for i, row in enumerate(all_values[1:], start=2):
+            def get(name, default=""):
+                idx = col(name)
+                if idx < 0 or idx >= len(row):
+                    return default
+                return row[idx] if row[idx] != "" else default
+            if normalize_phone(get("Telefon")) == phone_clean:
+                if get("Holat") == "Faol":
+                    target_row = {h: (row[j] if j < len(row) else "") for j, h in enumerate(headers)}
+                    row_index = i
+                    break
 
-        if normalize_phone(get("Telefon")) == phone_clean:
-            if get("Holat") == "Faol":
-                target_row = {h: (row[j] if j < len(row) else "") for j, h in enumerate(headers)}
-                row_index = i
-                break
     if not target_row:
         return {"success": False, "error": "Mijoz topilmadi yoki qarzi yoq"}
     old_remaining = safe_float(target_row.get("Qoldiq", 0))
@@ -481,15 +489,3 @@ def get_client_chat_id(phone: str) -> str:
                 return chat_id
 
     return ""
- 
- 
-def get_sheet(sheet_name: str): 
-    import gspread 
-    sh = get_spreadsheet() 
-    try: 
-        return sh.worksheet(sheet_name) 
-    except gspread.exceptions.WorksheetNotFound: 
-        ws = sh.add_worksheet(title=sheet_name, rows=500, cols=10) 
-        if sheet_name == "Katalog": 
-            ws.append_row(["Nom", "Narx", "Tavsif", "PhotoID", "Sana"]) 
-        return ws 
