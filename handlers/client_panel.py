@@ -72,48 +72,60 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
         phone = registered.get("Telefon", "")
         fio   = registered.get("FIO", "")
 
-        # Faol savdosini topish
+        # Barcha nasiyalarni ko'rsatish
         try:
-            sh      = get_spreadsheet()
-            sheets  = ensure_worksheets(sh)
-            records = ws_to_records(sheets["Savdolar"])
+            sh          = get_spreadsheet()
+            sheets      = ensure_worksheets(sh)
+            records     = ws_to_records(sheets["Savdolar"])
             phone_clean = phone.replace("+","").replace(" ","").replace("-","")
-            faol = [
+
+            korsatish = [
                 r for r in records
                 if str(r.get("Telefon","")).replace("+","").replace(" ","").replace("-","") == phone_clean
-                and str(r.get("Holat","")).strip() == "Faol"
+                and str(r.get("Holat","")).strip() != "Bekor qilindi"
             ]
-            if faol:
-                rec     = faol[0]
-                qoldiq  = format_money(rec.get("Qoldiq", 0))
-                keyingi = rec.get("Keyingi To'lov Sanasi", "")
-                tovar   = rec.get("Tovar", "")
-                await update.message.reply_text(
-                    f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n"
-                    f"👤 Ism: *{fio}*\n"
-                    f"📞 Telefon: `{phone}`\n\n"
-                    f"📋 *Joriy kredit:*\n"
-                    f"🛍 {tovar}\n"
-                    f"💰 Qoldiq: *{qoldiq} so'm*\n"
-                    f"📅 Keyingi to'lov: *{keyingi}*\n\n"
-                    f"🏪 TexnoVibe",
-                    parse_mode="Markdown",
-                    reply_markup=get_client_keyboard()
-                )
-            else:
-                await update.message.reply_text(
-                    f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n"
-                    f"👤 Ism: *{fio}*\n"
-                    f"📞 Telefon: `{phone}`\n\n"
-                    f"📋 Hozirda faol kreditingiz yo'q.\n\n"
-                    f"🏪 TexnoVibe",
-                    parse_mode="Markdown",
-                    reply_markup=get_client_keyboard()
-                )
-        except Exception:
-            await update.message.reply_text(
+
+            text = (
                 f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n"
-                f"👤 {fio} | 📞 {phone}",
+                f"👤 Ism: *{fio}*\n"
+                f"📞 Telefon: `{phone}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+            )
+
+            if korsatish:
+                for rec in korsatish:
+                    holat       = str(rec.get("Holat","")).strip()
+                    holat_emoji = "✅" if holat == "Yopildi" else "🔄"
+                    tovar       = rec.get("Tovar", "")
+                    jami        = format_money(rec.get("Jami Summa", 0))
+                    qoldiq      = format_money(rec.get("Qoldiq", 0))
+                    tolangan    = format_money(rec.get("To'langan Summa", 0))
+                    oylik       = format_money(rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)))
+                    tolov_turi  = rec.get("To'lov Turi", "")
+                    keyingi     = rec.get("Keyingi To'lov Sanasi", "")
+                    bonus       = format_money(rec.get("Kredit Bonusu", 0))
+                    reyting     = rec.get("Reyting", "")
+
+                    text += (
+                        f"{holat_emoji} *{tovar}*\n"
+                        f"💵 Jami: *{jami} so'm*\n"
+                        f"✅ To'langan: *{tolangan} so'm*\n"
+                        f"💰 Qoldiq: *{qoldiq} so'm*\n"
+                        f"📅 {tolov_turi} | 💳 Oylik: *{oylik} so'm*\n"
+                        f"📆 Keyingi to'lov: *{keyingi}*\n"
+                        f"⭐ Reyting: {reyting}\n"
+                        f"🎁 Bonus: *{bonus} so'm*\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n"
+                    )
+            else:
+                text += "📋 Hozirda faol kreditingiz yo'q.\n━━━━━━━━━━━━━━━━━━━━\n"
+
+            text += "\n🏪 TexnoVibe"
+            await update.message.reply_text(text, parse_mode="Markdown", reply_markup=get_client_keyboard())
+
+        except Exception as e:
+            await update.message.reply_text(
+                f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n👤 {fio} | 📞 {phone}",
                 parse_mode="Markdown",
                 reply_markup=get_client_keyboard()
             )
