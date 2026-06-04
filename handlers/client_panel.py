@@ -1,17 +1,16 @@
 """
 Mijoz paneli
-Tuzatildi:
-  - Bekor qilingan savdolar ko'rsatilmaydi
-  - To'lovlar tarixi to'g'ri ustundan o'qiladi
+Yangilik:
+  - Ro'yxatdan o'tgan foydalanuvchi qayta bosса — tasdiq xabari
+  - Kontakt tugmasi bilan avtomatik telefon yuborish
 """
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, KeyboardButtonRequestContact
 from telegram.ext import ContextTypes, ConversationHandler
 from sheets.google_sheets import (
     get_spreadsheet, ensure_worksheets,
     get_payment_history, save_client_chat_id, ws_to_records
 )
-from datetime import date
 import os
 
 REGISTER_PHONE = 40
@@ -42,27 +41,113 @@ def get_client_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
+def get_contact_keyboard():
+    """Kontakt yuborish tugmasi"""
+    keyboard = [
+        [KeyboardButton("📱 Raqamimni yuborish", request_contact=True)],
+        [KeyboardButton("🏠 Bosh Menyu")],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+
+def is_registered(chat_id: int) -> dict | None:
+    """Foydalanuvchi ro'yxatdan o'tganmi tekshiradi"""
+    try:
+        sh     = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+        for rec in ws_to_records(sheets["Mijozlar"]):
+            if str(rec.get("Chat ID", "")).strip() == str(chat_id):
+                return rec
+    except Exception:
+        pass
+    return None
+
+
 async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id    = update.effective_user.id
+    registered = is_registered(chat_id)
+
+    if registered:
+        # Allaqachon ro'yxatdan o'tgan
+        phone = registered.get("Telefon", "")
+        fio   = registered.get("FIO", "")
+
+        # Faol savdosini topish
+        try:
+            sh      = get_spreadsheet()
+            sheets  = ensure_worksheets(sh)
+            records = ws_to_records(sheets["Savdolar"])
+            phone_clean = phone.replace("+","").replace(" ","").replace("-","")
+            faol = [
+                r for r in records
+                if str(r.get("Telefon","")).replace("+","").replace(" ","").replace("-","") == phone_clean
+                and str(r.get("Holat","")).strip() == "Faol"
+            ]
+            if faol:
+                rec     = faol[0]
+                qoldiq  = format_money(rec.get("Qoldiq", 0))
+                keyingi = rec.get("Keyingi To'lov Sanasi", "")
+                tovar   = rec.get("Tovar", "")
+                await update.message.reply_text(
+                    f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n"
+                    f"👤 Ism: *{fio}*\n"
+                    f"📞 Telefon: `{phone}`\n\n"
+                    f"📋 *Joriy kredit:*\n"
+                    f"🛍 {tovar}\n"
+                    f"💰 Qoldiq: *{qoldiq} so'm*\n"
+                    f"📅 Keyingi to'lov: *{keyingi}*\n\n"
+                    f"🏪 TexnoVibe",
+                    parse_mode="Markdown",
+                    reply_markup=get_client_keyboard()
+                )
+            else:
+                await update.message.reply_text(
+                    f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n"
+                    f"👤 Ism: *{fio}*\n"
+                    f"📞 Telefon: `{phone}`\n\n"
+                    f"📋 Hozirda faol kreditingiz yo'q.\n\n"
+                    f"🏪 TexnoVibe",
+                    parse_mode="Markdown",
+                    reply_markup=get_client_keyboard()
+                )
+        except Exception:
+            await update.message.reply_text(
+                f"✅ *Siz allaqachon ro'yxatdan o'tgansiz!*\n\n"
+                f"👤 {fio} | 📞 {phone}",
+                parse_mode="Markdown",
+                reply_markup=get_client_keyboard()
+            )
+        return ConversationHandler.END
+
+    # Yangi foydalanuvchi — kontakt tugmasi bilan
     await update.message.reply_text(
-        "📝 *Royxatdan otish*\n\n"
-        "Telefon raqamingizni yozing:\n"
-        "_(Masalan: 998901234567 yoki +998901234567)_",
-        parse_mode="Markdown"
+        "📝 *Ro'yxatdan o'tish*\n\n"
+        "Pastdagi tugmani bosib telefon raqamingizni yuboring 👇\n\n"
+        "_(Yoki qo'lda ham yozishingiz mumkin)_",
+        parse_mode="Markdown",
+        reply_markup=get_contact_keyboard()
     )
     return REGISTER_PHONE
 
 
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    phone_input = update.message.text.strip()
-    user        = update.effective_user
-    chat_id     = user.id
-    username    = user.username or ""
+    user     = update.effective_user
+    chat_id  = user.id
+    username = user.username or ""
 
-    phone_clean = phone_input.replace("+", "").replace(" ", "").replace("-", "")
+    # Kontakt yuborilgan bo'lsa
+    if update.message.contact:
+        phone_input = update.message.contact.phone_number or ""
+        phone_clean = phone_input.replace("+", "").replace(" ", "").replace("-", "")
+    else:
+        # Qo'lda yozilgan
+        phone_input = update.message.text.strip()
+        phone_clean = phone_input.replace("+", "").replace(" ", "").replace("-", "")
+
     if not phone_clean.isdigit() or len(phone_clean) < 9:
         await update.message.reply_text(
-            "❌ Telefon raqami noto'g'ri.\nQaytadan kiriting:\n_(Masalan: 998901234567)_",
-            parse_mode="Markdown"
+            "❌ Telefon raqami noto'g'ri.\nQaytadan kiriting:",
+            reply_markup=get_contact_keyboard()
         )
         return REGISTER_PHONE
 
@@ -75,9 +160,8 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         found_rec = None
         for rec in records:
-            rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
-            holat     = str(rec.get("Holat", "")).strip()
-            if rec_phone == phone_clean and holat == "Faol":
+            rec_phone = str(rec.get("Telefon", "")).replace("+","").replace(" ","").replace("-","")
+            if rec_phone == phone_clean and str(rec.get("Holat","")).strip() == "Faol":
                 found_rec = rec
                 break
 
@@ -86,7 +170,8 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"❌ `{phone}` raqami bazada topilmadi.\n\n"
                 "Telefon raqamingiz to'g'riligini tekshiring\n"
                 "yoki do'konimizga murojaat qiling.\n\nQaytadan kiriting:",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
+                reply_markup=get_contact_keyboard()
             )
             return REGISTER_PHONE
 
@@ -98,21 +183,25 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyingi = found_rec.get("Keyingi To'lov Sanasi", "")
 
         await update.message.reply_text(
-            f"✅ *Muvaffaqiyatli royxatdan otdingiz!*\n\n"
+            f"✅ *Muvaffaqiyatli ro'yxatdan o'tdingiz!*\n\n"
             f"👤 Ism: *{fio}*\n"
             f"📞 Telefon: `{phone}`\n\n"
             f"📋 *Joriy kredit:*\n"
             f"🛍 {tovar}\n"
             f"💰 Qoldiq: *{qoldiq} so'm*\n"
             f"📅 Keyingi to'lov: *{keyingi}*\n\n"
-            f"Endi to'lov eslatmalarini olasiz!\n"
+            f"Endi to'lov eslatmalarini olasiz! 🔔\n"
             f"🏪 TexnoVibe",
             parse_mode="Markdown",
             reply_markup=get_client_keyboard()
         )
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Xatolik: `{str(e)}`", parse_mode="Markdown")
+        await update.message.reply_text(
+            f"❌ Xatolik: `{str(e)}`",
+            parse_mode="Markdown",
+            reply_markup=get_client_keyboard()
+        )
 
     context.user_data.clear()
     return ConversationHandler.END
@@ -125,12 +214,7 @@ async def cancel_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if args:
-        context.args = args
-        await register_phone(update, context)
-    else:
-        await start_register(update, context)
+    await start_register(update, context)
 
 
 async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -140,7 +224,6 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         sh      = get_spreadsheet()
         sheets  = ensure_worksheets(sh)
 
-        # Mijozni topish
         phone = None
         fio   = None
         for rec in ws_to_records(sheets["Mijozlar"]):
@@ -151,21 +234,20 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
         if not phone:
             await update.message.reply_text(
-                "❌ Siz hali royxatdan otmagansiz!\n\nRoyxatdan otish tugmasini bosing.",
+                "❌ Siz hali ro'yxatdan o'tmagansiz!\n\nRo'yxatdan o'tish tugmasini bosing.",
                 reply_markup=get_client_keyboard()
             )
             return
 
-        phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+        phone_clean = phone.replace("+","").replace(" ","").replace("-","")
+        all_sales   = ws_to_records(sheets["Savdolar"])
 
-        # Savdolarni olish — FAQAT faol va yopilgan (bekor qilinganlar chiqmaydi)
-        all_sales = ws_to_records(sheets["Savdolar"])
-        korsatish = []
-        for rec in all_sales:
-            rec_phone = str(rec.get("Telefon", "")).replace("+", "").replace(" ", "").replace("-", "")
-            holat     = str(rec.get("Holat", "")).strip()
-            if rec_phone == phone_clean and holat != "Bekor qilindi":
-                korsatish.append(rec)
+        # Bekor qilinganlar chiqmaydi
+        korsatish = [
+            r for r in all_sales
+            if str(r.get("Telefon","")).replace("+","").replace(" ","").replace("-","") == phone_clean
+            and str(r.get("Holat","")).strip() != "Bekor qilindi"
+        ]
 
         if not korsatish:
             await update.message.reply_text(
@@ -178,17 +260,12 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         text = f"👤 *{fio}*\n📞 `{phone}`\n━━━━━━━━━━━━━━━━━━━━\n"
 
         for rec in korsatish:
-            holat = str(rec.get("Holat", "")).strip()
-            if holat == "Yopildi":
-                holat_emoji = "✅"
-            else:
-                holat_emoji = "🔄"
-
+            holat        = str(rec.get("Holat","")).strip()
+            holat_emoji  = "✅" if holat == "Yopildi" else "🔄"
             tovar        = rec.get("Tovar", "")
             jami         = format_money(rec.get("Jami Summa", 0))
             qoldiq       = format_money(rec.get("Qoldiq", 0))
             tolov_turi   = rec.get("To'lov Turi", "")
-            # Oylik to'lov miqdori
             oylik        = format_money(rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)))
             keyingi      = rec.get("Keyingi To'lov Sanasi", "")
             reyting      = rec.get("Reyting", "")
@@ -207,15 +284,14 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 f"━━━━━━━━━━━━━━━━━━━━\n"
             )
 
-        # To'lovlar tarixi — Tolovlar varag'idan
+        # To'lovlar tarixi
         try:
             tolovlar = ws_to_records(sheets["Tolovlar"])
             mijoz_tolovlar = [
                 r for r in tolovlar
-                if str(r.get("Telefon", "")).replace("+","").replace(" ","").replace("-","") == phone_clean
+                if str(r.get("Telefon","")).replace("+","").replace(" ","").replace("-","") == phone_clean
             ]
             if mijoz_tolovlar:
-                # To'lov Summasi ustuni Tolovlar varag'ida
                 total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in mijoz_tolovlar)
                 text += f"📋 *SO'NGGI TO'LOVLAR:*\n"
                 for r in mijoz_tolovlar[-5:]:

@@ -289,6 +289,7 @@ def main():
         states={
             REGISTER_PHONE: [
                 MessageHandler(home_filter, cancel_register),
+                MessageHandler(filters.CONTACT, register_phone),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, register_phone),
             ],
         },
