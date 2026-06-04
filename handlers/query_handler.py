@@ -137,16 +137,20 @@ async def cmd_debtors(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = f"KECHIKAYOTGANLAR ({len(overdue)} ta)\n\n"
         for rec in overdue:
-            days = rec.get("Kechikish Kunlari", 0)
-            emoji = "🔴" if days >= 3 else "🟡"
-            fio = rec.get("FIO", "")
-            phone = rec.get("Telefon", "")
-            qoldiq = format_money(rec.get("Qoldiq", 0))
-            keyingi = rec.get("Keyingi To'lov Sanasi", "")
+            days      = rec.get("Kechikish Kunlari", 0)
+            emoji     = "🔴" if days >= 3 else "🟡"
+            fio       = rec.get("FIO", "")
+            phone     = rec.get("Telefon", "")
+            qoldiq    = format_money(rec.get("Qoldiq", 0))
+            keyingi   = rec.get("Keyingi To'lov Sanasi", "")
+            pay_type  = rec.get("To'lov Turi", "Oylik")
+            oylik     = format_money(rec.get("To'lov Summasi", 0))
+            pay_emoji = "📆" if pay_type == "Haftalik" else "📅"
             text += (
                 f"{emoji} {fio}\n"
                 f"📞 {phone}\n"
                 f"💰 Qoldiq: {qoldiq} som\n"
+                f"{pay_emoji} {pay_type} | 💳 {oylik} som\n"
                 f"⏰ Kechikish: {days} kun\n"
                 f"📅 Tolashi kerak edi: {keyingi}\n\n"
             )
