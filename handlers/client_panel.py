@@ -15,12 +15,19 @@ from datetime import datetime, timedelta, date
 import os
 
 
-def generate_schedule(remaining, per_payment, pay_type, periods, next_payment_str) -> str:
-    """Mavjud savdodan to'lov grafigini qaytaradi"""
+def generate_schedule(remaining, per_payment, pay_type, periods, next_payment_str, pay_day=None) -> str:
+    """Mavjud savdodan to'lov grafigini qaytaradi — oylik sanasi aniq saqlanadi"""
+    import calendar
     try:
         current = datetime.strptime(next_payment_str, "%d.%m.%Y").date()
     except Exception:
         return ""
+
+    # Oylik to'lovda kun raqamini saqlash
+    if pay_type == "Oylik":
+        tolov_kun = int(pay_day) if pay_day else current.day
+    else:
+        tolov_kun = None
 
     lines = ["\n📅 *To'lov jadvali:*"]
     current_remaining = float(remaining)
@@ -36,10 +43,16 @@ def generate_schedule(remaining, per_payment, pay_type, periods, next_payment_st
             f"*{int(payment):,}* so'm "
             f"(qoldiq: {max(0, int(current_remaining)):,})".replace(",", " ")
         )
+        # Keyingi sanani hisoblash
         if pay_type == "Haftalik":
             current += timedelta(weeks=1)
         else:
-            current += timedelta(days=30)
+            # Oyning aniq kunini saqlash: 10-sida → har oy 10-sida
+            month = current.month + 1 if current.month < 12 else 1
+            year  = current.year if current.month < 12 else current.year + 1
+            max_day = calendar.monthrange(year, month)[1]
+            actual_day = min(tolov_kun, max_day)
+            current = date(year, month, actual_day)
         if current_remaining <= 0:
             break
 
@@ -145,7 +158,8 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             per_payment=rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)),
                             pay_type=tolov_turi,
                             periods=rec.get("Muddat", 0),
-                            next_payment_str=keyingi
+                            next_payment_str=keyingi,
+                            pay_day=rec.get("To'lov Kuni", None)
                         )
                     else:
                         jadval = ""

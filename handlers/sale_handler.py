@@ -645,12 +645,15 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # To'lov jadvalini tayyorlash
                 jadval = result.get("schedule", [])
                 jadval_text = "📅 *TO'LOV JADVALI:*\n"
-                for item in jadval:
+                for item in jadval[:12]:  # max 12 ta ko'rsat
                     jadval_text += (
                         f"`{item['num']:2}.` {item['date']} — "
                         f"*{format_money(item['amount'])} so'm* "
                         f"(qoldiq: {format_money(item['remaining'])})\n"
                     )
+                if len(jadval) > 12:
+                    jadval_text += f"_... va yana {len(jadval)-12} ta to'lov_\n"
+                
 
                 client_msg = (
                     f"🎉 *Yangi nasiya rasmiylashtirildi!*\n\n"

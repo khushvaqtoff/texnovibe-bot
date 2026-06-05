@@ -167,21 +167,36 @@ def add_sale(sale_data: dict) -> dict:
     ]
     ws_sales.append_row(row)
     update_client_db(ws_clients, sale_data)
-    schedule = generate_payment_schedule(remaining, payment_per_period, sale_data["payment_type"], period, next_payment)
+    schedule = generate_payment_schedule(remaining, payment_per_period, sale_data["payment_type"], period, next_payment, pay_day=sale_data.get("pay_day"))
     return {"sale_id": sale_id, "remaining": remaining, "payment_per_period": payment_per_period,
             "next_payment": next_payment.strftime("%d.%m.%Y"), "schedule": schedule}
 
 
-def generate_payment_schedule(remaining, per_payment, pay_type, periods, start_date):
-    """start_date = birinchi to'lov sanasi"""
-    schedule = []
-    current_date = start_date
+def generate_payment_schedule(remaining, per_payment, pay_type, periods, start_date, pay_day=None):
+    """start_date = birinchi to'lov sanasi. Oylik uchun pay_day kuni saqlaydi"""
+    import calendar
+    schedule       = []
+    current_date   = start_date
     current_remaining = remaining
+    tolov_kun = int(pay_day) if pay_day else start_date.day
+
     for i in range(1, periods + 1):
         payment = min(per_payment, current_remaining)
         current_remaining -= payment
-        schedule.append({"num": i, "date": current_date.strftime("%d.%m.%Y"), "amount": payment, "remaining": max(0, current_remaining)})
-        current_date = current_date + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
+        schedule.append({
+            "num":       i,
+            "date":      current_date.strftime("%d.%m.%Y"),
+            "amount":    payment,
+            "remaining": max(0, current_remaining)
+        })
+        if pay_type == "Haftalik":
+            current_date = current_date + timedelta(weeks=1)
+        else:
+            # Har oy aniq kun: 10-sida → har oy 10-sida
+            month = current_date.month + 1 if current_date.month < 12 else 1
+            year  = current_date.year if current_date.month < 12 else current_date.year + 1
+            max_day = calendar.monthrange(year, month)[1]
+            current_date = date(year, month, min(tolov_kun, max_day))
     return schedule
 
 
@@ -489,17 +504,3 @@ def get_client_chat_id(phone: str) -> str:
                 return chat_id
 
     return ""
-
-
-def get_sheet(sheet_name: str):
-    """Katalog kabi qo'shimcha varaqlarni oladi yoki yaratadi"""
-    import gspread
-    sh = get_spreadsheet()
-    try:
-        return sh.worksheet(sheet_name)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=sheet_name, rows=500, cols=10)
-        if sheet_name == "Katalog":
-            ws.append_row(["ID", "Tovar Nomi", "Narx", "Tavsif", "PhotoID", "Holat", "Qoshilgan Sana"])
-            ws.format("A1:G1", {"textFormat": {"bold": True}})
-        return ws
