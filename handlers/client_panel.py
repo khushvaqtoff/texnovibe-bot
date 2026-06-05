@@ -11,7 +11,39 @@ from sheets.google_sheets import (
     get_spreadsheet, ensure_worksheets,
     get_payment_history, save_client_chat_id, ws_to_records
 )
+from datetime import datetime, timedelta, date
 import os
+
+
+def generate_schedule(remaining, per_payment, pay_type, periods, next_payment_str) -> str:
+    """Mavjud savdodan to'lov grafigini qaytaradi"""
+    try:
+        current = datetime.strptime(next_payment_str, "%d.%m.%Y").date()
+    except Exception:
+        return ""
+
+    lines = ["\n📅 *To'lov jadvali:*"]
+    current_remaining = float(remaining)
+    per = float(per_payment) if float(per_payment) > 0 else current_remaining
+
+    for i in range(1, int(periods) + 1):
+        payment = min(per, current_remaining)
+        current_remaining -= payment
+        if current_remaining < 0:
+            current_remaining = 0
+        lines.append(
+            f"`{i:2}.` {current.strftime('%d.%m.%Y')} — "
+            f"*{int(payment):,}* so'm "
+            f"(qoldiq: {max(0, int(current_remaining)):,})".replace(",", " ")
+        )
+        if pay_type == "Haftalik":
+            current += timedelta(weeks=1)
+        else:
+            current += timedelta(days=30)
+        if current_remaining <= 0:
+            break
+
+    return "\n".join(lines)
 
 REGISTER_PHONE = 40
 
@@ -106,6 +138,18 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     bonus       = format_money(rec.get("Kredit Bonusu", 0))
                     reyting     = rec.get("Reyting", "")
 
+                    # To'lov grafigi
+                    if holat == "Faol":
+                        jadval = generate_schedule(
+                            remaining=rec.get("Qoldiq", 0),
+                            per_payment=rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)),
+                            pay_type=tolov_turi,
+                            periods=rec.get("Muddat", 0),
+                            next_payment_str=keyingi
+                        )
+                    else:
+                        jadval = ""
+
                     text += (
                         f"{holat_emoji} *{tovar}*\n"
                         f"💵 Jami: *{jami} so'm*\n"
@@ -115,8 +159,11 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"📆 Keyingi to'lov: *{keyingi}*\n"
                         f"⭐ Reyting: {reyting}\n"
                         f"🎁 Bonus: *{bonus} so'm*\n"
-                        f"━━━━━━━━━━━━━━━━━━━━\n"
                     )
+                    if jadval:
+                        text += jadval + "\n"
+                    text += "━━━━━━━━━━━━━━━━━━━━\n"
+                    
             else:
                 text += "📋 Hozirda faol kreditingiz yo'q.\n━━━━━━━━━━━━━━━━━━━━\n"
 
@@ -284,6 +331,19 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             bonus        = format_money(rec.get("Kredit Bonusu", 0))
             tolangan     = format_money(rec.get("To'langan Summa", 0))
 
+            # To'lov grafigi
+            if holat == "Faol":
+                muddat   = rec.get("Muddat", 0)
+                jadval   = generate_schedule(
+                    remaining=rec.get("Qoldiq", 0),
+                    per_payment=rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)),
+                    pay_type=tolov_turi,
+                    periods=muddat,
+                    next_payment_str=keyingi
+                )
+            else:
+                jadval = ""
+
             text += (
                 f"{holat_emoji} *{tovar}*\n"
                 f"💵 Jami: *{jami} so'm*\n"
@@ -293,8 +353,11 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
                 f"📆 Keyingi to'lov: *{keyingi}*\n"
                 f"⭐ Reyting: {reyting}\n"
                 f"🎁 Bonus: *{bonus} so'm*\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
             )
+            if jadval:
+                text += jadval + "\n"
+            text += "━━━━━━━━━━━━━━━━━━━━\n"
+            
 
         # To'lovlar tarixi
         try:

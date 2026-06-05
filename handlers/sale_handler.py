@@ -642,16 +642,30 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     tolov_kuni = result["next_payment"]
 
+                # To'lov jadvalini tayyorlash
+                jadval = result.get("schedule", [])
+                jadval_text = "📅 *TO'LOV JADVALI:*\n"
+                for item in jadval:
+                    jadval_text += (
+                        f"`{item['num']:2}.` {item['date']} — "
+                        f"*{format_money(item['amount'])} so'm* "
+                        f"(qoldiq: {format_money(item['remaining'])})\n"
+                    )
+
                 client_msg = (
                     f"🎉 *Yangi nasiya rasmiylashtirildi!*\n\n"
                     f"Hurmatli *{context.user_data.get('fio')}!*\n\n"
                     f"🛍 Tovar: *{context.user_data.get('product')}*\n"
-                    f"💰 Jami qoldiq: *{format_money(result['remaining'])} so'm*\n"
+                    f"💵 Jami narx: *{format_money(context.user_data.get('total_price', 0))} so'm*\n"
+                    f"💳 Avans: *{format_money(context.user_data.get('down_payment', 0))} so'm*\n"
+                    f"💰 Qoldiq: *{format_money(result['remaining'])} so'm*\n"
                     f"📅 To'lov turi: *{pay_type}*\n"
                     f"🗓 Muddat: *{period} {period_word}*\n"
                     f"💳 Har to'lov: *{format_money(result['payment_per_period'])} so'm*\n"
                     f"🔔 To'lov kuni: *{tolov_kuni}*\n"
-                    f"📆 Birinchi to'lov: *{result['next_payment']}*\n\n"
+                    f"📆 Birinchi to'lov: *{result['next_payment']}*\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{jadval_text}\n"
                     f"Xaridingiz uchun rahmat! 🏪 TexnoVibe"
                 )
                 await query.get_bot().send_message(
