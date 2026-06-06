@@ -243,6 +243,18 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bonus    = format_money(result.get("bonus", 0))
         tovar    = sale["tovar"]
 
+        full_periods    = result.get("full_periods", 0)
+        next_amount     = result.get("next_payment_amount", result.get("next_amount", 0))
+        next_amt_fmt    = format_money(next_amount)
+        diff            = result.get("diff", 0)
+
+        if diff > 0:
+            diff_text = f"\n⬆️ Ortiqcha: *{format_money(diff)} so'm* → keyingi to'lovga o'tkazildi"
+        elif diff < 0:
+            diff_text = f"\n⬇️ Kam to'landi: *{format_money(abs(diff))} so'm* → keyingi to'lovga qo'shildi"
+        else:
+            diff_text = ""
+
         if result["is_closed"]:
             admin_msg = (
                 "🎉 *KREDIT TO'LIQ YOPILDI!*\n"
@@ -264,8 +276,10 @@ async def payment_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🛍 Tovar: *{tovar}*\n"
                 f"💵 To'landi: *{paid} so'm*\n"
                 f"📊 Eski qoldiq: *{old_rem} so'm*\n"
-                f"💰 Yangi qoldiq: *{new_rem} so'm*\n"
+                f"💰 Yangi qoldiq: *{new_rem} so'm*"
+                f"{diff_text}\n"
                 f"📅 Keyingi to'lov: *{next_pay}*\n"
+                f"💳 Keyingi miqdor: *{next_amt_fmt} so'm*\n"
                 f"🎁 Bonus: *{bonus} so'm*\n"
                 "━━━━━━━━━━━━━━━━━━━━"
             )

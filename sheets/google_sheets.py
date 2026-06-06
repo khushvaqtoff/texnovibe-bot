@@ -278,38 +278,93 @@ def record_payment(phone: str, amount: float, row_index: int = None) -> dict:
 
     if not target_row:
         return {"success": False, "error": "Mijoz topilmadi yoki qarzi yoq"}
-    old_remaining = safe_float(target_row.get("Qoldiq", 0))
+
+    import calendar as _calendar
+
+    old_remaining      = safe_float(target_row.get("Qoldiq", 0))
+    payment_per_period = safe_float(target_row.get("To'lov Summasi", 0))
+    pay_type           = target_row.get("To'lov Turi", "Oylik")
+    pay_day            = safe_float(target_row.get("To'lov Kuni", 0))
+    today              = date.today()
+
+    # ── Qoldiq hisoblash ──────────────────────────────────────
     new_remaining = max(0, old_remaining - amount)
-    today = date.today()
-    pay_type = target_row.get("To'lov Turi", "Oylik")
-    next_date = today + (timedelta(weeks=1) if pay_type == "Haftalik" else timedelta(days=30))
-    ws_sales.update_cell(row_index, 8, new_remaining)
-    ws_sales.update_cell(row_index, 12, next_date.strftime("%d.%m.%Y"))
-    # Tolangan summani yangilash (21-ustun)
+
+    # ── Keyingi to'lov miqdorini hisoblash ───────────────────
+    # Ortiqcha to'lansa: keyingi to'lovdan ayirib tashlanadi
+    # Kam to'lansa:      qolgan qism keyingi to'lovga qo'shiladi
+    if payment_per_period > 0 and new_remaining > 0:
+        diff = amount - payment_per_period          # + ortiqcha, - kam
+        if diff >= 0:
+            # Ortiqcha to'langan — keyingi to'lov miqdori shu farq uchun kamayadi
+            next_payment_amount = max(0, payment_per_period - diff % payment_per_period)
+            if next_payment_amount == 0:
+                next_payment_amount = payment_per_period
+        else:
+            # Kam to'langan — keyingi to'lovga qolgan qism qo'shiladi
+            next_payment_amount = min(payment_per_period + abs(diff), new_remaining)
+    else:
+        next_payment_amount = min(payment_per_period, new_remaining) if new_remaining > 0 else 0
+
+    # ── Keyingi to'lov sanasini aniq hisoblash ────────────────
+    def next_payment_date_calc():
+        if pay_type == "Haftalik":
+            return today + timedelta(weeks=1)
+        # Oylik — to'lov kunini aniq saqlash
+        kun = int(pay_day) if pay_day else today.day
+        m   = today.month + 1 if today.month < 12 else 1
+        y   = today.year  if today.month < 12 else today.year + 1
+        max_day = _calendar.monthrange(y, m)[1]
+        return date(y, m, min(kun, max_day))
+
+    next_date = next_payment_date_calc()
+
+    # ── Sheets yangilash ─────────────────────────────────────
+    ws_sales.update_cell(row_index, col("Qoldiq") + 1,                new_remaining)
+    ws_sales.update_cell(row_index, col("Keyingi To'lov Sanasi") + 1, next_date.strftime("%d.%m.%Y"))
+    ws_sales.update_cell(row_index, col("To'lov Summasi") + 1,        round(next_payment_amount))
+
     old_paid = safe_float(target_row.get("To'langan Summa", 0))
     new_paid = old_paid + amount
-    ws_sales.update_cell(row_index, 21, new_paid)
+    ws_sales.update_cell(row_index, col("To'langan Summa") + 1, new_paid)
+
     if new_remaining == 0:
-        ws_sales.update_cell(row_index, 14, "Yopildi")
-        ws_sales.update_cell(row_index, 15, "🟢 Alo")
-    # Bonus hisoblash:
-    # - Oylik to'lovni to'liq to'lasa: oylik summaning 2%
-    # - Oylikdan kam to'lasa: to'langan summaning 2%
+        ws_sales.update_cell(row_index, col("Holat") + 1,   "Yopildi")
+        ws_sales.update_cell(row_index, col("Reyting") + 1, "🟢 Alo")
+
+    # ── Bonus hisoblash ──────────────────────────────────────
     current_bonus = safe_float(target_row.get("Kredit Bonusu", 0))
-    payment_per_period = safe_float(target_row.get("To'lov Summasi", 0))
     if amount >= payment_per_period:
         bonus_earned = round(payment_per_period * 0.02)
     else:
         bonus_earned = round(amount * 0.02)
     new_bonus = current_bonus + bonus_earned
-    ws_sales.update_cell(row_index, 18, new_bonus)
+    ws_sales.update_cell(row_index, col("Kredit Bonusu") + 1, new_bonus)
+
+    # ── To'lovlar varag'iga yozish ────────────────────────────
     payment_records = ws_payments.get_all_values()
     pay_id = f"PAY-{max(0, len(payment_records)-1):04d}"
-    ws_payments.append_row([pay_id, target_row.get("ID"), target_row.get("FIO"), phone, amount, today.strftime("%d.%m.%Y"), new_remaining])
+    ws_payments.append_row([
+        pay_id, target_row.get("ID"), target_row.get("FIO"),
+        phone, amount, today.strftime("%d.%m.%Y"), new_remaining
+    ])
+
     update_rating(ws_sales, row_index, today, target_row)
-    return {"success": True, "fio": target_row.get("FIO"), "tovar": target_row.get("Tovar", ""), "paid": amount, "old_remaining": old_remaining,
-            "new_remaining": new_remaining, "next_payment": next_date.strftime("%d.%m.%Y"),
-            "is_closed": new_remaining == 0, "bonus": new_bonus, "chat_id": target_row.get("Chat ID", "")}
+
+    return {
+        "success":              True,
+        "fio":                  target_row.get("FIO"),
+        "tovar":                target_row.get("Tovar", ""),
+        "paid":                 amount,
+        "old_remaining":        old_remaining,
+        "new_remaining":        new_remaining,
+        "next_payment":         next_date.strftime("%d.%m.%Y"),
+        "next_payment_amount":  round(next_payment_amount),
+        "is_closed":            new_remaining == 0,
+        "bonus":                new_bonus,
+        "chat_id":              target_row.get("Chat ID", ""),
+        "diff":                 amount - payment_per_period,   # + ortiqcha, - kam
+    }
 
 
 def update_rating(ws, row_index, today, record):
