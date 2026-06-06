@@ -289,17 +289,11 @@ def record_payment(phone: str, amount: float, row_index: int = None) -> dict:
 
     # ── Qoldiq hisoblash ──────────────────────────────────────
     new_remaining = max(0, old_remaining - amount)
-
-    # ── Nechta to'lov qoplangani va keyingi sana/miqdor ──────
-    # Mantiq:
-    #   amount = 1 oylik  → keyingi oyga 1 sana siljiydi
-    #   amount = 2 oylik  → 2 oy siljiydi (muddatidan oldin)
-    #   amount < oylik    → keyingi to'lovga qolgan qism qo'shiladi
-    #   amount = qoldiq   → kredit yopiladi
+    diff_val      = amount - payment_per_period  # + ortiqcha, - kam
 
     kun = int(pay_day) if pay_day else 1
 
-    def _add_months(d, n):
+    def _add_months(d, n=1):
         """d sanaga n oy qo'shadi, to'lov kunini saqlaydi"""
         m = d.month + n
         y = d.year + (m - 1) // 12
@@ -307,72 +301,79 @@ def record_payment(phone: str, amount: float, row_index: int = None) -> dict:
         max_d = _calendar.monthrange(y, m)[1]
         return date(y, m, min(kun, max_d))
 
-    def _add_weeks(d, n):
-        return d + timedelta(weeks=n)
+    # Hozirgi keyingi to'lov sanasini olish
+    try:
+        current_next = datetime.strptime(
+            target_row.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y"
+        ).date()
+        # Kechikib to'lasa — today dan 1 davr oldinga
+        if current_next < today:
+            if pay_type == "Haftalik":
+                current_next = today + timedelta(weeks=1)
+            else:
+                current_next = _add_months(today, 1)
+    except Exception:
+        if pay_type == "Haftalik":
+            current_next = today + timedelta(weeks=1)
+        else:
+            current_next = _add_months(today, 1)
 
-    if payment_per_period > 0 and new_remaining > 0:
-        diff = amount - payment_per_period  # + ortiqcha, - kam
+    if new_remaining == 0:
+        # Kredit yopildi
+        next_date           = current_next
+        next_payment_amount = 0
+        full_periods        = 1
+        diff_val            = amount - payment_per_period
 
-        if diff >= 0:
-            # Ortiqcha yoki to'liq — nechta to'lov qoplangan
-            full_periods    = int(amount // payment_per_period)
-            leftover        = amount % payment_per_period  # ortiqcha qism
+    elif payment_per_period > 0:
+        diff_val     = amount - payment_per_period
+        full_periods = max(1, int(amount // payment_per_period))
+        leftover     = amount % payment_per_period
 
+        if diff_val > 0:
+            # ── Ortiqcha yoki ko'p to'langan ─────────────────
+            # Nechta to'lov qoplangan — sana shuncha davr siljiydi
+            if pay_type == "Haftalik":
+                next_date = _add_weeks(current_next, full_periods)
+            else:
+                next_date = _add_months(current_next, full_periods)
+
+            # Keyingi to'lov miqdori: ortiqcha qism ayiriladi
             if leftover > 0:
-                # Ortiqcha qism keyingi to'lovdan ayiriladi
-                next_payment_amount = max(0, payment_per_period - leftover)
+                next_payment_amount = payment_per_period - leftover
                 if next_payment_amount <= 0:
                     next_payment_amount = payment_per_period
-                    full_periods += 1
+                    if pay_type == "Haftalik":
+                        next_date = _add_weeks(next_date, 1)
+                    else:
+                        next_date = _add_months(next_date, 1)
             else:
                 next_payment_amount = payment_per_period
 
-            # Sana: full_periods oy/hafta oldinga siljiydi
-            if pay_type == "Haftalik":
-                next_date = _add_weeks(today, full_periods)
-            else:
-                # Hozirgi keyingi to'lov sanasidan hisoblash
-                try:
-                    base = datetime.strptime(
-                        target_row.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y"
-                    ).date()
-                    # Agar kechikib to'lasa base today dan oldin — today dan hisoblash
-                    if base < today:
-                        base = today
-                except Exception:
-                    base = today
-                if pay_type == "Haftalik":
-                    next_date = _add_weeks(base, full_periods)
-                else:
-                    next_date = _add_months(base, full_periods)
-
-            # Keyingi to'lov miqdori qolgan summadan oshmasin
-            next_payment_amount = min(next_payment_amount, new_remaining)
+        elif diff_val < 0:
+            # ── Kam to'langan ─────────────────────────────────
+            # Sana o'zgarmaydi — keyingi to'lovga qolgan qism qo'shiladi
+            full_periods        = 0
+            next_date           = current_next
+            next_payment_amount = payment_per_period + abs(diff_val)
 
         else:
-            # Kam to'langan — keyingi to'lovga qolgan qism qo'shiladi
-            full_periods        = 0
-            next_payment_amount = min(payment_per_period + abs(diff), new_remaining)
-            # Sana o'zgarmaydi — hozirgi keyingi to'lov sanasi saqlanadi
-            try:
-                next_date = datetime.strptime(
-                    target_row.get("Keyingi To'lov Sanasi", ""), "%d.%m.%Y"
-                ).date()
-            except Exception:
-                if pay_type == "Haftalik":
-                    next_date = today + timedelta(weeks=1)
-                else:
-                    next_date = _add_months(today, 1)
+            # ── Aniq 1 oylik to'langan ────────────────────────
+            full_periods        = 1
+            next_payment_amount = payment_per_period
+            if pay_type == "Haftalik":
+                next_date = _add_weeks(current_next, 1)
+            else:
+                next_date = _add_months(current_next, 1)
 
-        diff_val = diff  # return uchun
+        # Keyingi to'lov qolgan summadan oshmasin
+        next_payment_amount = min(next_payment_amount, new_remaining)
+
     else:
+        diff_val            = 0
         full_periods        = 0
         next_payment_amount = 0
-        diff_val            = 0
-        if pay_type == "Haftalik":
-            next_date = today + timedelta(weeks=1)
-        else:
-            next_date = _add_months(today, 1)
+        next_date           = current_next
 
     # ── Sheets yangilash ─────────────────────────────────────
     ws_sales.update_cell(row_index, col("Qoldiq") + 1,                new_remaining)
