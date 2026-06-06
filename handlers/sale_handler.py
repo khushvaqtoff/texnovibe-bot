@@ -1,9 +1,6 @@
 """
 Savdo kiritish handleri
-Yangilik:
-  - Tovar katalogdan inline tugmalar bilan tanlanadi
-  - To'lov kunida qaysi oydan boshlanishi so'raladi
-  - Bekor qilingan savdo mijozda ko'rinmaydi (Holat=Bekor qilindi)
+Yangilik: Bitta savdoda bir nechta tovar — vergul bilan, narxlar qo'shiladi
 """
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -20,7 +17,6 @@ WEEK_DAYS = {
     1: "Dushanba", 2: "Seshanba", 3: "Chorshanba",
     4: "Payshanba", 5: "Juma", 6: "Shanba", 7: "Yakshanba"
 }
-
 MONTHS = {
     1:"Yanvar", 2:"Fevral", 3:"Mart", 4:"Aprel",
     5:"May", 6:"Iyun", 7:"Iyul", 8:"Avgust",
@@ -29,8 +25,7 @@ MONTHS = {
 
 
 def normalize_phone(phone: str) -> str:
-    return str(phone).replace("+", "").replace(" ", "").replace("-", "").strip()
-
+    return str(phone).replace("+","").replace(" ","").replace("-","").strip()
 
 def format_money(amount) -> str:
     try:
@@ -38,14 +33,79 @@ def format_money(amount) -> str:
     except:
         return str(amount)
 
-
 def get_catalog_products() -> list:
     try:
         ws   = get_sheet("Katalog")
         rows = ws.get_all_records()
-        return [r for r in rows if str(r.get("Holat", "")).strip() == "Faol"]
+        return [r for r in rows if str(r.get("Holat","")).strip() == "Faol"]
     except:
         return []
+
+
+# ─── YORDAMCHI: tanlangan tovarlar ro'yxatini ko'rsatish ────
+def _selected_text(context) -> str:
+    items = context.user_data.get("_selected_items", [])
+    if not items:
+        return ""
+    text = "🛒 *Tanlangan tovarlar:*\n"
+    total = 0
+    for i, item in enumerate(items, 1):
+        text += f"  {i}. {item['nom']} — {format_money(item['narx'])} so'm\n"
+        total += item['narx']
+    text += f"💵 *Jami: {format_money(total)} so'm*\n"
+    return text
+
+
+async def _ask_product(msg_or_query, context, edit=False):
+    """Katalogdan tovar tanlash tugmalarini ko'rsatish"""
+    products = get_catalog_products()
+    context.user_data["_catalog"] = products
+
+    selected_items = context.user_data.get("_selected_items", [])
+    selected_names = {item["nom"] for item in selected_items}
+
+    keyboard = []
+
+    if products:
+        for i, p in enumerate(products):
+            nom  = p.get("Tovar Nomi", p.get("Nom", "Tovar"))
+            narx = format_money(p.get("Narx", 0))
+            # Allaqachon tanlangan tovarni belgilash
+            prefix = "✅ " if nom in selected_names else "🛍 "
+            keyboard.append([InlineKeyboardButton(
+                f"{prefix}{nom} — {narx} so'm",
+                callback_data=f"prod_{i}"
+            )])
+
+    keyboard.append([InlineKeyboardButton("✏️ Qo'lda kiritish", callback_data="prod_manual")])
+
+    # Agar kamida 1 ta tanlangan bo'lsa — "Tayyor" tugmasi
+    if selected_items:
+        total = sum(item["narx"] for item in selected_items)
+        keyboard.append([InlineKeyboardButton(
+            f"✅ Tayyor ({len(selected_items)} ta | {format_money(total)} so'm)",
+            callback_data="prod_done"
+        )])
+
+    sel_text = _selected_text(context)
+    text = (sel_text + "\n" if sel_text else "") + "3️⃣ Tovar tanlang (bir nechta bo'lsa qayta bosing):"
+
+    if edit:
+        try:
+            await msg_or_query.edit_message_text(
+                text, parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except Exception:
+            await msg_or_query.message.reply_text(
+                text, parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+    else:
+        await msg_or_query.reply_text(
+            text, parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 
 # ─── 1. BOSHLASH ────────────────────────────────────────────
@@ -68,9 +128,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return NAME
     context.user_data["fio"] = name
     await update.message.reply_text(
-        f"✅ Ism: {name}\n\n"
-        "2️⃣ Telefon raqamini kiriting:\n"
-        "_(Masalan: +998901234567)_",
+        f"✅ Ism: {name}\n\n2️⃣ Telefon raqamini kiriting:\n_(Masalan: +998901234567)_",
         parse_mode="Markdown"
     )
     return PHONE
@@ -78,7 +136,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── 3. TELEFON ─────────────────────────────────────────────
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    phone      = update.message.text.strip()
+    phone       = update.message.text.strip()
     clean_phone = normalize_phone(phone)
 
     if not clean_phone.isdigit() or len(clean_phone) < 9:
@@ -86,6 +144,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return PHONE
 
     context.user_data["phone"] = phone
+    context.user_data["_selected_items"] = []  # tovarlar ro'yxati
     await update.message.reply_text("⏳ Tekshirilmoqda...")
 
     try:
@@ -112,38 +171,8 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PRODUCT
 
 
-async def _ask_product(msg_or_query, context, edit=False):
-    """Katalogdan tovar tanlash tugmalarini ko'rsatish"""
-    products = get_catalog_products()
-
-    if products:
-        keyboard = []
-        for i, p in enumerate(products):
-            nom   = p.get("Tovar Nomi", p.get("Nom", "Tovar"))
-            narx  = format_money(p.get("Narx", 0))
-            keyboard.append([InlineKeyboardButton(
-                f"🛍 {nom} — {narx} so'm",
-                callback_data=f"prod_{i}"
-            )])
-        keyboard.append([InlineKeyboardButton("✏️ Qo'lda kiritish", callback_data="prod_manual")])
-        context.user_data["_catalog"] = products
-
-        text = "3️⃣ Tovarni tanlang yoki qo'lda kiriting:"
-        if edit:
-            await msg_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            await msg_or_query.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-    else:
-        text = "3️⃣ Tovar nomini kiriting:\n_(Masalan: Samsung Galaxy A55)_"
-        if edit:
-            await msg_or_query.edit_message_text(text, parse_mode="Markdown")
-        else:
-            await msg_or_query.reply_text(text, parse_mode="Markdown")
-
-
-# ─── 4. TOVAR ───────────────────────────────────────────────
+# ─── 4. TOVAR (bir nechta tanlash) ──────────────────────────
 async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Callback (katalogdan tanlash yoki dup confirm)
     if update.callback_query:
         query = update.callback_query
         await query.answer()
@@ -158,32 +187,57 @@ async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _ask_product(query, context, edit=True)
             return PRODUCT
 
-        # Katalogdan tovar tanlash
-        if query.data.startswith("prod_"):
-            if query.data == "prod_manual":
-                await query.edit_message_text(
-                    "✏️ Tovar nomini yozing:\n_(Masalan: Samsung Galaxy A55)_",
-                    parse_mode="Markdown"
-                )
-                context.user_data["_manual_product"] = True
+        # Tovar tanlash tugaди
+        if query.data == "prod_done":
+            items = context.user_data.get("_selected_items", [])
+            if not items:
+                await query.answer("❌ Hech tovar tanlanmadi!", show_alert=True)
                 return PRODUCT
 
-            idx = int(query.data.replace("prod_", ""))
+            # Tovarlar nomini vergul bilan birlashtirish
+            nom_list   = ", ".join(item["nom"] for item in items)
+            total_narx = sum(item["narx"] for item in items)
+            context.user_data["product"]        = nom_list
+            context.user_data["_catalog_price"] = float(total_narx)
+
+            await query.edit_message_text(
+                f"✅ *Tovarlar:*\n{_selected_text(context)}\n"
+                f"4️⃣ Ish joyini kiriting:\n_(Yo'q bo'lsa: - yozing)_",
+                parse_mode="Markdown"
+            )
+            return TOTAL_PRICE
+
+        # Qo'lda kiritish
+        if query.data == "prod_manual":
+            await query.edit_message_text(
+                "✏️ Tovar nomini yozing:\n_(Masalan: Samsung Galaxy A55)_",
+                parse_mode="Markdown"
+            )
+            context.user_data["_manual_product"] = True
+            return PRODUCT
+
+        # Katalogdan tanlash
+        if query.data.startswith("prod_"):
+            idx      = int(query.data.replace("prod_", ""))
             products = context.user_data.get("_catalog", [])
             if idx < len(products):
-                p   = products[idx]
-                nom = p.get("Tovar Nomi", p.get("Nom", ""))
-                context.user_data["product"] = nom
-                # Narxni ham avtomatik olish
-                if p.get("Narx"):
-                    context.user_data["_catalog_price"] = float(p["Narx"])
+                p    = products[idx]
+                nom  = p.get("Tovar Nomi", p.get("Nom", ""))
+                narx = float(p.get("Narx", 0))
 
-                await query.edit_message_text(
-                    f"✅ Tovar: *{nom}*\n\n"
-                    f"4️⃣ Ish joyini kiriting:\n_(Yo'q bo'lsa: - yozing)_",
-                    parse_mode="Markdown"
-                )
-                return TOTAL_PRICE
+                items = context.user_data.setdefault("_selected_items", [])
+                # Agar allaqachon bor bo'lsa — olib tashlash (toggle)
+                existing = next((i for i, x in enumerate(items) if x["nom"] == nom), None)
+                if existing is not None:
+                    items.pop(existing)
+                    await query.answer(f"❌ {nom} olib tashlandi")
+                else:
+                    items.append({"nom": nom, "narx": narx})
+                    await query.answer(f"✅ {nom} qo'shildi!")
+
+                # Yangilangan tugmalar bilan ko'rsatish
+                await _ask_product(query, context, edit=True)
+            return PRODUCT
 
         return PRODUCT
 
@@ -197,25 +251,22 @@ async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(product) < 2:
             await update.message.reply_text("❌ Tovar nomi juda qisqa. Qaytadan kiriting:")
             return PRODUCT
-        context.user_data["product"] = product
+
+        # Qo'lda kiritilgan tovarni ro'yxatga qo'shish (narxsiz)
+        items = context.user_data.setdefault("_selected_items", [])
+        items.append({"nom": product, "narx": 0})
         context.user_data["_manual_product"] = False
+
         await update.message.reply_text(
-            f"✅ Tovar: *{product}*\n\n"
-            f"4️⃣ Ish joyini kiriting:\n_(Yo'q bo'lsa: - yozing)_",
+            f"✅ *{product}* qo'shildi!\n\n"
+            f"{_selected_text(context)}\n"
+            "Yana tovar qo'shishingiz yoki 'Tayyor' deb bosishingiz mumkin:",
             parse_mode="Markdown"
         )
-        return TOTAL_PRICE
+        await _ask_product(update.message, context)
+        return PRODUCT
 
-    # Eski oqim (katalog yo'q bo'lsa bevosita matn)
-    work_place = update.message.text.strip()
-    if work_place in ["-", "yoq", "yo'q"]:
-        work_place = ""
-    context.user_data["work_place"] = work_place
-    await update.message.reply_text(
-        "4️⃣ Tovar nomini kiriting:\n_(Masalan: Samsung Galaxy A55)_",
-        parse_mode="Markdown"
-    )
-    return TOTAL_PRICE
+    return PRODUCT
 
 
 # ─── 5. ISH JOYI VA NARX ────────────────────────────────────
@@ -252,26 +303,23 @@ async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Ish joyi kiritilganmi yoki narxmi?
     if "work_place" not in context.user_data:
-        # Bu ish joyi
         work_place = text
         if work_place in ["-", "yoq", "yo'q"]:
             work_place = ""
         context.user_data["work_place"] = work_place
 
-        # Katalogdan narx olindi edi
-        if context.user_data.get("_catalog_price"):
-            price = context.user_data["_catalog_price"]
-            # Narxni saqlash — lekin foydalanuvchi o'zgartira oladi
+        catalog_price = context.user_data.get("_catalog_price", 0)
+        if catalog_price:
             keyboard = [[
                 InlineKeyboardButton(
-                    f"✅ Ha, {format_money(price)} so'm",
+                    f"✅ Ha, {format_money(catalog_price)} so'm",
                     callback_data="price_confirm"
                 ),
                 InlineKeyboardButton("✏️ Narxni o'zgartirish", callback_data="price_change")
             ]]
             await update.message.reply_text(
                 f"✅ Ish joyi: {work_place or 'Korsatilmagan'}\n"
-                f"💵 Katalog narxi: *{format_money(price)} so'm*\n\n"
+                f"💵 Jami narx: *{format_money(catalog_price)} so'm*\n\n"
                 "5️⃣ Shu narxda davom etasizmi?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -284,9 +332,9 @@ async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return TOTAL_PRICE
 
-    # Bu narx
+    # Narx kiritish
     try:
-        price_text = text.replace(" ", "").replace(",", "")
+        price_text = text.replace(" ","").replace(",","")
         price = float(price_text)
         if price <= 0:
             raise ValueError
@@ -296,33 +344,30 @@ async def get_total_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["total_price"] = price
     keyboard = [[
-        InlineKeyboardButton("📅 Oylik", callback_data="pay_monthly"),
+        InlineKeyboardButton("📅 Oylik",    callback_data="pay_monthly"),
         InlineKeyboardButton("📆 Haftalik", callback_data="pay_weekly")
     ]]
     await update.message.reply_text(
-        f"✅ Jami narx: {format_money(price)} so'm\n\n"
-        "6️⃣ To'lov turini tanlang:",
+        f"✅ Jami narx: {format_money(price)} so'm\n\n6️⃣ To'lov turini tanlang:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return PAYMENT_TYPE
 
 
-# ─── 6. TO'LOV TURI VA NARX ─────────────────────────────────
+# ─── 6. TO'LOV TURI ─────────────────────────────────────────
 async def get_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         query = update.callback_query
         await query.answer()
 
-        # Narx tasdiqlash yoki o'zgartirish
         if query.data == "price_confirm":
             price = context.user_data.get("_catalog_price", 0)
             context.user_data["total_price"] = price
             await query.edit_message_text(
-                f"✅ Narx tasdiqlandi: *{format_money(price)} so'm*\n\n"
-                "6️⃣ To'lov turini tanlang:",
+                f"✅ Narx tasdiqlandi: *{format_money(price)} so'm*\n\n6️⃣ To'lov turini tanlang:",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("📅 Oylik", callback_data="pay_monthly"),
+                    InlineKeyboardButton("📅 Oylik",    callback_data="pay_monthly"),
                     InlineKeyboardButton("📆 Haftalik", callback_data="pay_weekly")
                 ]])
             )
@@ -340,38 +385,26 @@ async def get_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
             period_word = "oyga"  if query.data == "pay_monthly" else "haftaga"
             context.user_data["payment_type"] = pay_type
             await query.edit_message_text(
-                f"✅ To'lov turi: {pay_type}\n\n"
-                f"7️⃣ Necha {period_word}?\n_(Masalan: 6)_",
+                f"✅ To'lov turi: {pay_type}\n\n7️⃣ Necha {period_word}?\n_(Masalan: 6)_",
                 parse_mode="Markdown"
             )
             return INSTALLMENT_PERIOD
 
-        # Agar narx kiritilmagan bo'lsa (katalog narxi bilan)
-        if "total_price" not in context.user_data:
-            return PAYMENT_TYPE
-
-        # Narxni matn sifatida olish (eski oqim)
-        return PAYMENT_TYPE
-
-    # Matn — narx kiritish
     if "total_price" not in context.user_data:
         try:
-            price_text = update.message.text.strip().replace(" ", "").replace(",", "")
-            price = float(price_text)
+            price = float(update.message.text.strip().replace(" ","").replace(",",""))
             if price <= 0:
                 raise ValueError
         except ValueError:
-            await update.message.reply_text("❌ Narx noto'g'ri. Faqat raqam kiriting (masalan: 3500000):")
+            await update.message.reply_text("❌ Narx noto'g'ri. Faqat raqam kiriting:")
             return PAYMENT_TYPE
-
         context.user_data["total_price"] = price
         keyboard = [[
-            InlineKeyboardButton("📅 Oylik", callback_data="pay_monthly"),
+            InlineKeyboardButton("📅 Oylik",    callback_data="pay_monthly"),
             InlineKeyboardButton("📆 Haftalik", callback_data="pay_weekly")
         ]]
         await update.message.reply_text(
-            f"✅ Jami narx: {format_money(price)} so'm\n\n"
-            "6️⃣ To'lov turini tanlang:",
+            f"✅ Jami narx: {format_money(price)} so'm\n\n6️⃣ To'lov turini tanlang:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return PAYMENT_TYPE
@@ -395,8 +428,7 @@ async def get_installment_period(update: Update, context: ContextTypes.DEFAULT_T
 
     await update.message.reply_text(
         f"✅ Muddat: {period} {period_word}\n\n"
-        "8️⃣ Boshlang'ich to'lov (avans) summasini kiriting:\n"
-        "_(Avans yo'q bo'lsa 0 kiriting)_",
+        "8️⃣ Boshlang'ich to'lov (avans) summasini kiriting:\n_(Avans yo'q bo'lsa 0 kiriting)_",
         parse_mode="Markdown"
     )
     return DOWN_PAYMENT
@@ -405,7 +437,7 @@ async def get_installment_period(update: Update, context: ContextTypes.DEFAULT_T
 # ─── 8. AVANS ───────────────────────────────────────────────
 async def get_down_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        down  = float(update.message.text.strip().replace(" ", "").replace(",", ""))
+        down  = float(update.message.text.strip().replace(" ","").replace(",",""))
         total = context.user_data["total_price"]
         if down < 0 or down >= total:
             raise ValueError
@@ -439,7 +471,6 @@ async def get_agent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["agent"] = agent
 
     pay_type = context.user_data["payment_type"]
-
     if pay_type == "Oylik":
         keyboard = []
         row = []
@@ -459,15 +490,15 @@ async def get_agent(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Dushanba",   callback_data="payday_1"),
             InlineKeyboardButton("Seshanba",   callback_data="payday_2"),
             InlineKeyboardButton("Chorshanba", callback_data="payday_3"),
-        ], [
+        ],[
             InlineKeyboardButton("Payshanba",  callback_data="payday_4"),
             InlineKeyboardButton("Juma",       callback_data="payday_5"),
             InlineKeyboardButton("Shanba",     callback_data="payday_6"),
-        ], [
+        ],[
             InlineKeyboardButton("Yakshanba",  callback_data="payday_7"),
         ]]
         await update.message.reply_text(
-            "🔟 Har hafta qaysi kuni to'lov qiladi?\nTo'lov kunini tanlang:",
+            "🔟 Har hafta qaysi kuni to'lov qiladi?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     return PAY_DAY
@@ -486,10 +517,9 @@ async def get_pay_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if pay_type == "Haftalik":
             day_name = WEEK_DAYS.get(day, str(day))
             await query.edit_message_text(f"✅ To'lov kuni: har hafta {day_name}")
-            return await _ask_start_month(query, context)
         else:
             await query.edit_message_text(f"✅ To'lov kuni: har oyning {day}-si")
-            return await _ask_start_month(query, context)
+        return await _ask_start_month(query, context)
 
     if query.data.startswith("startmonth_"):
         month = int(query.data.replace("startmonth_", ""))
@@ -502,7 +532,6 @@ async def get_pay_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _ask_start_month(query, context):
-    """Qaysi oydan boshlanishi — joriy + keyingi 3 oy"""
     today = date.today()
     keyboard = []
     row = []
@@ -512,7 +541,6 @@ async def _ask_start_month(query, context):
         label = f"{MONTHS[m]} {y}"
         row.append(InlineKeyboardButton(label, callback_data=f"startmonth_{m}"))
     keyboard.append(row)
-
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text="📅 Birinchi to'lov qaysi oydan boshlanadi?",
@@ -529,23 +557,32 @@ async def _show_confirm(query, context):
     pay_type    = data["payment_type"]
     period_word = "oy" if pay_type == "Oylik" else "hafta"
     pay_day     = data.get("pay_day", 0)
-    start_month = data.get("start_month", date.today().month)
-    month_name  = MONTHS.get(start_month, "")
+    month_name  = MONTHS.get(data.get("start_month", date.today().month), "")
 
-    if pay_type == "Haftalik":
-        tolov_kuni = f"Har hafta {WEEK_DAYS.get(pay_day, str(pay_day))}"
+    tolov_kuni = (
+        f"Har hafta {WEEK_DAYS.get(pay_day, str(pay_day))}"
+        if pay_type == "Haftalik"
+        else f"Har oyning {pay_day}-si"
+    )
+
+    # Tovarlar ro'yxati
+    items    = data.get("_selected_items", [])
+    tovar_str = data.get("product", "")
+    if items:
+        tovar_lines = "\n".join(f"   • {item['nom']} — {format_money(item['narx'])} so'm" for item in items)
+        tovar_block = f"🛍 Tovarlar:\n{tovar_lines}"
     else:
-        tolov_kuni = f"Har oyning {pay_day}-si"
+        tovar_block = f"🛍 Tovar: {tovar_str}"
 
     summary = (
         f"📋 *SAVDO MA'LUMOTLARI*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 Mijoz: {data['fio']}\n"
         f"📞 Telefon: {data['phone']}\n"
-        f"🏢 Ish joyi: {data.get('work_place', '') or 'Korsatilmagan'}\n"
-        f"🛍 Tovar: {data['product']}\n"
+        f"🏢 Ish joyi: {data.get('work_place','') or 'Korsatilmagan'}\n"
+        f"{tovar_block}\n"
         f"💵 Jami narx: {format_money(data['total_price'])} so'm\n"
-        f"💳 Avans: {format_money(data.get('down_payment', 0))} so'm\n"
+        f"💳 Avans: {format_money(data.get('down_payment',0))} so'm\n"
         f"💰 Qoldiq: {format_money(remaining)} so'm\n"
         f"📅 To'lov turi: {pay_type}\n"
         f"🗓 Muddat: {data['installment_period']} {period_word}\n"
@@ -588,15 +625,13 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("⏳ Ma'lumotlar saqlanmoqda...")
 
     try:
-        # start_month ni google_sheets ga uzatish
         result = add_sale(context.user_data)
 
-        # Buyurtma bo'lsa avtomatik "Yetkazildi" ga o'tkazish
         try:
             from handlers.order_handler import auto_complete_order
             auto_complete_order(
-                phone=context.user_data.get("phone", ""),
-                product_name=context.user_data.get("product", "")
+                phone=context.user_data.get("phone",""),
+                product_name=context.user_data.get("product","")
             )
         except Exception:
             pass
@@ -618,22 +653,20 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 Qoldiq: {format_money(result['remaining'])} so'm\n"
             f"📆 Har to'lov: {format_money(result['payment_per_period'])} so'm\n"
             f"📅 Birinchi to'lov: {result['next_payment']}\n\n"
-            f"{schedule_text}\n"
-            f"✅ Google Sheets ga saqlandi",
+            f"{schedule_text}\n✅ Google Sheets ga saqlandi",
             parse_mode="Markdown"
         )
 
         # Mijozga xabar
         try:
             from sheets.google_sheets import get_client_chat_id
-            phone          = context.user_data.get("phone", "")
+            phone          = context.user_data.get("phone","")
             client_chat_id = get_client_chat_id(phone)
             if client_chat_id and str(client_chat_id).strip():
-                pay_type    = context.user_data.get("payment_type", "Oylik")
-                period      = context.user_data.get("installment_period", 0)
+                pay_type    = context.user_data.get("payment_type","Oylik")
+                period      = context.user_data.get("installment_period",0)
                 period_word = "oy" if pay_type == "Oylik" else "hafta"
-                pay_day     = context.user_data.get("pay_day", 0)
-                start_month = context.user_data.get("start_month", date.today().month)
+                pay_day     = context.user_data.get("pay_day",0)
 
                 if pay_type == "Oylik" and pay_day:
                     tolov_kuni = f"Har oyning {pay_day}-si"
@@ -642,10 +675,9 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     tolov_kuni = result["next_payment"]
 
-                # To'lov jadvalini tayyorlash
-                jadval = result.get("schedule", [])
+                jadval      = result.get("schedule", [])
                 jadval_text = "📅 *TO'LOV JADVALI:*\n"
-                for item in jadval[:12]:  # max 12 ta ko'rsat
+                for item in jadval[:12]:
                     jadval_text += (
                         f"`{item['num']:2}.` {item['date']} — "
                         f"*{format_money(item['amount'])} so'm* "
@@ -653,14 +685,21 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 if len(jadval) > 12:
                     jadval_text += f"_... va yana {len(jadval)-12} ta to'lov_\n"
-                
+
+                # Tovarlar ro'yxati
+                items = context.user_data.get("_selected_items", [])
+                if items and len(items) > 1:
+                    tovar_lines = "\n".join(f"   • {x['nom']} — {format_money(x['narx'])} so'm" for x in items)
+                    tovar_block = f"🛍 *Tovarlar:*\n{tovar_lines}"
+                else:
+                    tovar_block = f"🛍 Tovar: *{context.user_data.get('product')}*"
 
                 client_msg = (
                     f"🎉 *Yangi nasiya rasmiylashtirildi!*\n\n"
                     f"Hurmatli *{context.user_data.get('fio')}!*\n\n"
-                    f"🛍 Tovar: *{context.user_data.get('product')}*\n"
-                    f"💵 Jami narx: *{format_money(context.user_data.get('total_price', 0))} so'm*\n"
-                    f"💳 Avans: *{format_money(context.user_data.get('down_payment', 0))} so'm*\n"
+                    f"{tovar_block}\n"
+                    f"💵 Jami narx: *{format_money(context.user_data.get('total_price',0))} so'm*\n"
+                    f"💳 Avans: *{format_money(context.user_data.get('down_payment',0))} so'm*\n"
                     f"💰 Qoldiq: *{format_money(result['remaining'])} so'm*\n"
                     f"📅 To'lov turi: *{pay_type}*\n"
                     f"🗓 Muddat: *{period} {period_word}*\n"
@@ -688,7 +727,7 @@ async def confirm_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from telegram import ReplyKeyboardMarkup, KeyboardButton
-    admin_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
+    admin_id = int(os.getenv("ADMIN_CHAT_ID","0"))
     user_id  = update.effective_user.id
 
     if user_id == admin_id:
