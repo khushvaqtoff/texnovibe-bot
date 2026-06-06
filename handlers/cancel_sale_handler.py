@@ -237,6 +237,7 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sid    = rec.get("ID", "")
         jami   = format_money(rec.get("Jami Summa", 0))
         qoldiq = format_money(rec.get("Qoldiq", 0))
+        phone  = rec.get("Telefon", "")
 
         await query.edit_message_text(
             "✅ *SAVDO BEKOR QILINDI*\n"
@@ -251,6 +252,26 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📊 Google Sheets da yangilandi ✅",
             parse_mode="Markdown"
         )
+
+        # Mijozga xabar
+        try:
+            from sheets.google_sheets import get_client_chat_id
+            client_chat_id = get_client_chat_id(phone)
+            if client_chat_id and str(client_chat_id).strip():
+                await query.get_bot().send_message(
+                    chat_id=int(client_chat_id),
+                    text=(
+                        "❌ *Savdoyingiz bekor qilindi*\n\n"
+                        f"🛍 Tovar: *{tovar}*\n"
+                        f"🆔 Savdo ID: `{sid}`\n"
+                        f"📅 Sana: {today}\n\n"
+                        "Savollar uchun do'konimizga murojaat qiling.\n"
+                        "🏪 TexnoVibe"
+                    ),
+                    parse_mode="Markdown"
+                )
+        except Exception:
+            pass
 
     except Exception as e:
         await query.edit_message_text(
