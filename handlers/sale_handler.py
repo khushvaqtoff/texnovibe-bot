@@ -179,11 +179,11 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Ism allaqachon saqlangan — tovar tanlashga o'tish
             await query.edit_message_text(
                 f"✅ Mijoz: *{context.user_data.get('fio', '')}*\n"
-                f"📞 Telefon: `{context.user_data.get('phone', '')}`\n\n"
-                "Tovar tanlanmoqda...",
+                f"📞 Telefon: `{context.user_data.get('phone', '')}`",
                 parse_mode="Markdown"
             )
-            await _ask_product(query, context, edit=False)
+            # Yangi xabar sifatida katalog chiqarish
+            await _ask_product(query.message, context, edit=False)
             return PRODUCT
 
     name = update.message.text.strip()
