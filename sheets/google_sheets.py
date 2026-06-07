@@ -319,6 +319,10 @@ def record_payment(phone: str, amount: float, row_index: int = None) -> dict:
         max_d = _calendar.monthrange(y, m)[1]
         return date(y, m, min(kun, max_d))
 
+    def _add_weeks(d, n=1):
+        """d sanaga n hafta qo'shadi"""
+        return d + timedelta(weeks=n)
+
     # Hozirgi keyingi to'lov sanasini olish
     try:
         current_next = datetime.strptime(
