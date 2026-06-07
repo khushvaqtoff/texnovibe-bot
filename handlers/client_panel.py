@@ -15,45 +15,53 @@ from datetime import datetime, timedelta, date
 import os
 
 
-def generate_schedule(remaining, per_payment, pay_type, periods, next_payment_str, pay_day=None) -> str:
-    """Mavjud savdodan to'lov grafigini qaytaradi — oylik sanasi aniq saqlanadi"""
+def generate_schedule(remaining, per_payment, pay_type, periods,
+                      next_payment_str, pay_day=None,
+                      first_payment=None, base_payment=None) -> str:
+    """
+    remaining     — hozirgi qoldiq
+    per_payment   — joriy keyingi to'lov (ortiqcha/kamdan keyin yangilangan)
+    base_payment  — ASAL oylik miqdor (har oy shu miqdor, o'zgarmaydi)
+    first_payment — 1-to'lov miqdori (= per_payment)
+    """
     import calendar
     try:
         current = datetime.strptime(next_payment_str, "%d.%m.%Y").date()
     except Exception:
         return ""
 
-    # Oylik to'lovda kun raqamini saqlash
-    if pay_type == "Oylik":
-        tolov_kun = int(pay_day) if pay_day else current.day
-    else:
-        tolov_kun = None
+    tolov_kun = int(pay_day) if pay_day else current.day
+
+    # Asl oylik — 2-oydan boshlab shu miqdor ishlatiladi
+    asl = float(base_payment) if base_payment and float(base_payment) > 0 \
+          else float(per_payment) if float(per_payment) > 0 else float(remaining)
+    # 1-to'lov (joriy, ortiqcha/kamdan keyin)
+    birinchi = float(per_payment) if float(per_payment) > 0 else asl
 
     lines = ["\n📅 *To'lov jadvali:*"]
     current_remaining = float(remaining)
-    per = float(per_payment) if float(per_payment) > 0 else current_remaining
+    i = 0
 
-    for i in range(1, int(periods) + 1):
-        payment = min(per, current_remaining)
-        current_remaining -= payment
-        if current_remaining < 0:
-            current_remaining = 0
+    while current_remaining > 0:
+        i += 1
+        payment = min(birinchi if i == 1 else asl, current_remaining)
+        current_remaining = max(0, current_remaining - payment)
+
         lines.append(
             f"`{i:2}.` {current.strftime('%d.%m.%Y')} — "
             f"*{int(payment):,}* so'm "
-            f"(qoldiq: {max(0, int(current_remaining)):,})".replace(",", " ")
+            f"(qoldiq: {int(current_remaining):,})".replace(",", " ")
         )
-        # Keyingi sanani hisoblash
+
         if pay_type == "Haftalik":
             current += timedelta(weeks=1)
         else:
-            # Oyning aniq kunini saqlash: 10-sida → har oy 10-sida
             month = current.month + 1 if current.month < 12 else 1
             year  = current.year if current.month < 12 else current.year + 1
             max_day = calendar.monthrange(year, month)[1]
-            actual_day = min(tolov_kun, max_day)
-            current = date(year, month, actual_day)
-        if current_remaining <= 0:
+            current = date(year, month, min(tolov_kun, max_day))
+
+        if i >= 60:  # xavfsizlik limiti
             break
 
     return "\n".join(lines)
@@ -153,13 +161,23 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # To'lov grafigi
                     if holat == "Faol":
+                        # Asl oylik = (Jami - Avans) / Muddat
+                        try:
+                            _jami   = safe_float(rec.get("Jami Summa", 0))
+                            _avans  = safe_float(rec.get("Boshlang'ich To'lov", 0))
+                            _muddat = int(str(rec.get("Muddat", 1)).replace(" ", "") or 1)
+                            asl_oylik = round((_jami - _avans) / _muddat) if _muddat > 0 else 0
+                        except Exception:
+                            asl_oylik = None
                         jadval = generate_schedule(
                             remaining=rec.get("Qoldiq", 0),
                             per_payment=rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)),
                             pay_type=tolov_turi,
                             periods=rec.get("Muddat", 0),
                             next_payment_str=keyingi,
-                            pay_day=rec.get("To'lov Kuni", None)
+                            pay_day=rec.get("To'lov Kuni", None),
+                            first_payment=rec.get("To'lov Summasi", None),
+                            base_payment=asl_oylik
                         )
                     else:
                         jadval = ""
@@ -347,13 +365,22 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
             # To'lov grafigi
             if holat == "Faol":
-                muddat   = rec.get("Muddat", 0)
-                jadval   = generate_schedule(
+                try:
+                    _jami   = safe_float(rec.get("Jami Summa", 0))
+                    _avans  = safe_float(rec.get("Boshlang'ich To'lov", 0))
+                    _muddat = int(str(rec.get("Muddat", 1)).replace(" ", "") or 1)
+                    asl_oylik = round((_jami - _avans) / _muddat) if _muddat > 0 else 0
+                except Exception:
+                    asl_oylik = None
+                jadval = generate_schedule(
                     remaining=rec.get("Qoldiq", 0),
                     per_payment=rec.get("To'lov Summasi", rec.get("Oylik To'lov", 0)),
                     pay_type=tolov_turi,
-                    periods=muddat,
-                    next_payment_str=keyingi
+                    periods=rec.get("Muddat", 0),
+                    next_payment_str=keyingi,
+                    pay_day=rec.get("To'lov Kuni", None),
+                    first_payment=rec.get("To'lov Summasi", None),
+                    base_payment=asl_oylik
                 )
             else:
                 jadval = ""
@@ -373,12 +400,19 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
             text += "━━━━━━━━━━━━━━━━━━━━\n"
             
 
-        # To'lovlar tarixi
+        # To'lovlar tarixi — faqat aktiv (Faol) savdolar uchun
         try:
-            tolovlar = ws_to_records(sheets["Tolovlar"])
+            tolovlar    = ws_to_records(sheets["Tolovlar"])
+            # Aktiv savdolarning ID larini olish
+            faol_ids    = {
+                str(r.get("ID","")).strip()
+                for r in korsatish
+                if str(r.get("Holat","")).strip() == "Faol"
+            }
             mijoz_tolovlar = [
                 r for r in tolovlar
                 if str(r.get("Telefon","")).replace("+","").replace(" ","").replace("-","") == phone_clean
+                and str(r.get("Savdo ID","")).strip() in faol_ids
             ]
             if mijoz_tolovlar:
                 total_paid = sum(safe_float(r.get("To'lov Summasi", 0)) for r in mijoz_tolovlar)
