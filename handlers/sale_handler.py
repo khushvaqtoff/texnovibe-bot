@@ -135,27 +135,30 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         dup = check_duplicate(clean_phone)
         if dup["exists"]:
+            # Ism allaqachon ma'lum — saqlash va to'g'ridan tovar tanlashga o'tish
+            context.user_data["fio"] = dup["fio"]
+            context.user_data["_selected_items"] = []
             keyboard = [[
-                InlineKeyboardButton("✅ Ha, qo\u2019shaman", callback_data="dup_yes"),
-                InlineKeyboardButton("❌ Yo\u2019q, bekor",   callback_data="dup_no")
+                InlineKeyboardButton("✅ Ha, qo'shaman", callback_data="dup_yes"),
+                InlineKeyboardButton("❌ Yo'q, bekor",   callback_data="dup_no")
             ]]
             await update.message.reply_text(
                 f"⚠️ Bu telefon bazada bor!\n\n"
                 f"👤 Mijoz: *{dup['fio']}*\n"
-                f"🛍 Tovar: {dup['product']}\n"
-                f"💰 Qoldiq: {format_money(dup['remaining'])} so\u2019m\n\n"
-                f"Shunda ham yangi savdo qo\u2019shaveraymi?",
+                f"🛍 Mavjud tovar: {dup['product']}\n"
+                f"💰 Qoldiq: {format_money(dup['remaining'])} so'm\n\n"
+                f"Shunda ham yangi savdo qo'shaveraymi?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            context.user_data["awaiting_dup_confirm"] = True
             return NAME
     except Exception as e:
         await update.message.reply_text(f"⚠️ Baza tekshirishda xato: {str(e)}\nDavom etilmoqda...")
 
+    # Yangi mijoz — ism so'rash
     await update.message.reply_text(
         f"✅ Telefon: `{phone}`\n\n"
-        "2️⃣ Mijozning to\u2019liq ismini kiriting:\n"
+        "2️⃣ Mijozning to'liq ismini kiriting:\n"
         "_(Masalan: Anvarov Ali Karimovich)_",
         parse_mode="Markdown"
     )
@@ -173,14 +176,15 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return ConversationHandler.END
         elif query.data == "dup_yes":
-            context.user_data["awaiting_dup_confirm"] = False
-            phone = context.user_data.get("phone", "")
+            # Ism allaqachon saqlangan — tovar tanlashga o'tish
             await query.edit_message_text(
-                f"✅ Telefon: `{phone}`\n\n"
-                "2️⃣ Mijozning to\u2019liq ismini kiriting:",
+                f"✅ Mijoz: *{context.user_data.get('fio', '')}*\n"
+                f"📞 Telefon: `{context.user_data.get('phone', '')}`\n\n"
+                "Tovar tanlanmoqda...",
                 parse_mode="Markdown"
             )
-            return NAME
+            await _ask_product(query, context, edit=False)
+            return PRODUCT
 
     name = update.message.text.strip()
     if len(name) < 3:
