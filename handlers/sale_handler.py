@@ -486,19 +486,17 @@ async def get_agent(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        keyboard = [[
-            InlineKeyboardButton("Dushanba",   callback_data="payday_1"),
-            InlineKeyboardButton("Seshanba",   callback_data="payday_2"),
-            InlineKeyboardButton("Chorshanba", callback_data="payday_3"),
-        ],[
-            InlineKeyboardButton("Payshanba",  callback_data="payday_4"),
-            InlineKeyboardButton("Juma",       callback_data="payday_5"),
-            InlineKeyboardButton("Shanba",     callback_data="payday_6"),
-        ],[
-            InlineKeyboardButton("Yakshanba",  callback_data="payday_7"),
-        ]]
+        # Keyingi 7 kun — sana bilan ko'rsatish
+        from datetime import date, timedelta
+        bugun = date.today()
+        keyboard = []
+        for i in range(7):
+            kun = bugun + timedelta(days=i+1)
+            kun_nomi = WEEK_DAYS.get(kun.isoweekday(), "")
+            label = f"{kun_nomi} ({kun.strftime('%d.%m')})"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"payday_{kun.isoweekday()}")])
         await update.message.reply_text(
-            "🔟 Har hafta qaysi kuni to'lov qiladi?",
+            "🔟 Har hafta qaysi kuni to'lov qiladi?\nQuyidagi kunlardan tanlang:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     return PAY_DAY
@@ -522,28 +520,67 @@ async def get_pay_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await _ask_start_month(query, context)
 
     if query.data.startswith("startmonth_"):
-        month = int(query.data.replace("startmonth_", ""))
-        context.user_data["start_month"] = month
-        month_name = MONTHS.get(month, str(month))
-        await query.edit_message_text(f"✅ Birinchi to'lov: {month_name} oyidan boshlanadi")
+        parts = query.data.replace("startmonth_", "").split("_")
+        if len(parts) == 3:
+            # Haftalik — aniq sana: month_day_year
+            month, day, year = int(parts[0]), int(parts[1]), int(parts[2])
+            context.user_data["start_month"] = month
+            context.user_data["start_day"]   = day
+            context.user_data["start_year"]  = year
+            from datetime import date as _date
+            sana = _date(year, month, day).strftime("%d.%m.%Y")
+            await query.edit_message_text(f"✅ Birinchi to'lov: {sana} dan boshlanadi")
+        else:
+            # Oylik
+            month = int(parts[0])
+            context.user_data["start_month"] = month
+            month_name = MONTHS.get(month, str(month))
+            await query.edit_message_text(f"✅ Birinchi to'lov: {month_name} oyidan boshlanadi")
         return await _show_confirm(query, context)
 
     return PAY_DAY
 
 
 async def _ask_start_month(query, context):
-    today = date.today()
-    keyboard = []
-    row = []
-    for i in range(4):
-        m = (today.month - 1 + i) % 12 + 1
-        y = today.year + ((today.month - 1 + i) // 12)
-        label = f"{MONTHS[m]} {y}"
-        row.append(InlineKeyboardButton(label, callback_data=f"startmonth_{m}"))
-    keyboard.append(row)
+    from datetime import date, timedelta
+    today    = date.today()
+    pay_type = context.user_data.get("payment_type", "Oylik")
+
+    if pay_type == "Haftalik":
+        # Haftalik — keyingi 4 hafta sanasini ko'rsatish
+        pay_day = context.user_data.get("pay_day", 1)  # haftaning kuni
+        keyboard = []
+        # Tanlangan hafta kuniga qarab keyingi 4 ta sanani topish
+        bugun = today
+        sanalar = []
+        for i in range(1, 29):
+            kun = bugun + timedelta(days=i)
+            if kun.isoweekday() == pay_day:
+                sanalar.append(kun)
+            if len(sanalar) == 4:
+                break
+        row = []
+        for s in sanalar:
+            kun_nomi = WEEK_DAYS.get(s.isoweekday(), "")
+            label    = f"{kun_nomi} {s.strftime('%d.%m.%Y')}"
+            row.append(InlineKeyboardButton(label, callback_data=f"startmonth_{s.month}_{s.day}_{s.year}"))
+        keyboard.append(row)
+        text = "📅 Birinchi to'lov qaysi kuni boshlanadi?"
+    else:
+        # Oylik — keyingi 4 oy
+        keyboard = []
+        row = []
+        for i in range(4):
+            m = (today.month - 1 + i) % 12 + 1
+            y = today.year + ((today.month - 1 + i) // 12)
+            label = f"{MONTHS[m]} {y}"
+            row.append(InlineKeyboardButton(label, callback_data=f"startmonth_{m}"))
+        keyboard.append(row)
+        text = "📅 Birinchi to'lov qaysi oydan boshlanadi?"
+
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text="📅 Birinchi to'lov qaysi oydan boshlanadi?",
+        text=text,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return PAY_DAY
