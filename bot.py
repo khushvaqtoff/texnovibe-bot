@@ -125,16 +125,16 @@ def main():
             MessageHandler(filters.Regex("^➕ Yangi Savdo$"), start_sale),
         ],
         states={
-            NAME: [
-                MessageHandler(home_filter, cancel),
-                MessageHandler(bekor_filter, cancel),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_name),
-            ],
             PHONE: [
                 MessageHandler(home_filter, cancel),
                 MessageHandler(bekor_filter, cancel),
-                CallbackQueryHandler(get_payment_type),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone),
+            ],
+            NAME: [
+                MessageHandler(home_filter, cancel),
+                MessageHandler(bekor_filter, cancel),
+                CallbackQueryHandler(get_name, pattern="^dup_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_name),
             ],
             PRODUCT: [
                 MessageHandler(home_filter, cancel),

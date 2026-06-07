@@ -10,7 +10,7 @@ import os
 import calendar
 from datetime import date, timedelta
 
-NAME, PHONE, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
+PHONE, NAME, PRODUCT, TOTAL_PRICE, PAYMENT_TYPE, \
     INSTALLMENT_PERIOD, DOWN_PAYMENT, AGENT, PAY_DAY, START_MONTH, CONFIRM = range(11)
 
 WEEK_DAYS = {
@@ -113,62 +113,84 @@ async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
         "➕ *Yangi Nasiya Savdo*\n\n"
-        "1️⃣ Mijozning to'liq ismini kiriting:\n"
-        "_(Masalan: Anvarov Ali Karimovich)_",
-        parse_mode="Markdown"
-    )
-    return NAME
-
-
-# ─── 2. ISM ─────────────────────────────────────────────────
-async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    name = update.message.text.strip()
-    if len(name) < 3:
-        await update.message.reply_text("❌ Ism juda qisqa. Qaytadan kiriting:")
-        return NAME
-    context.user_data["fio"] = name
-    await update.message.reply_text(
-        f"✅ Ism: {name}\n\n2️⃣ Telefon raqamini kiriting:\n_(Masalan: +998901234567)_",
+        "1️⃣ Mijozning telefon raqamini kiriting:\n"
+        "_(Masalan: +998901234567)_",
         parse_mode="Markdown"
     )
     return PHONE
 
 
-# ─── 3. TELEFON ─────────────────────────────────────────────
+# ─── 2. TELEFON → tekshirish → ISM ──────────────────────────
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone       = update.message.text.strip()
     clean_phone = normalize_phone(phone)
 
     if not clean_phone.isdigit() or len(clean_phone) < 9:
-        await update.message.reply_text("❌ Telefon raqami noto'g'ri. Qaytadan kiriting:")
+        await update.message.reply_text("❌ Telefon raqami noto\u2019g\u2019ri. Qaytadan kiriting:")
         return PHONE
 
     context.user_data["phone"] = phone
-    context.user_data["_selected_items"] = []  # tovarlar ro'yxati
     await update.message.reply_text("⏳ Tekshirilmoqda...")
 
     try:
         dup = check_duplicate(clean_phone)
         if dup["exists"]:
             keyboard = [[
-                InlineKeyboardButton("✅ Ha, qo'shaman", callback_data="dup_yes"),
-                InlineKeyboardButton("❌ Yo'q, bekor",   callback_data="dup_no")
+                InlineKeyboardButton("✅ Ha, qo\u2019shaman", callback_data="dup_yes"),
+                InlineKeyboardButton("❌ Yo\u2019q, bekor",   callback_data="dup_no")
             ]]
             await update.message.reply_text(
                 f"⚠️ Bu telefon bazada bor!\n\n"
-                f"👤 Mijoz: {dup['fio']}\n"
+                f"👤 Mijoz: *{dup['fio']}*\n"
                 f"🛍 Tovar: {dup['product']}\n"
-                f"💰 Qoldiq: {format_money(dup['remaining'])} so'm\n\n"
-                f"Shunda ham yangi savdo qo'shaveraymi?",
+                f"💰 Qoldiq: {format_money(dup['remaining'])} so\u2019m\n\n"
+                f"Shunda ham yangi savdo qo\u2019shaveraymi?",
+                parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             context.user_data["awaiting_dup_confirm"] = True
-            return PRODUCT
+            return NAME
     except Exception as e:
         await update.message.reply_text(f"⚠️ Baza tekshirishda xato: {str(e)}\nDavom etilmoqda...")
 
+    await update.message.reply_text(
+        f"✅ Telefon: `{phone}`\n\n"
+        "2️⃣ Mijozning to\u2019liq ismini kiriting:\n"
+        "_(Masalan: Anvarov Ali Karimovich)_",
+        parse_mode="Markdown"
+    )
+    return NAME
+
+
+# ─── 3. ISM ─────────────────────────────────────────────────
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Duplicate callback dan kelishi mumkin
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        if query.data == "dup_no":
+            await query.edit_message_text("❌ Savdo bekor qilindi.")
+            context.user_data.clear()
+            return ConversationHandler.END
+        elif query.data == "dup_yes":
+            context.user_data["awaiting_dup_confirm"] = False
+            phone = context.user_data.get("phone", "")
+            await query.edit_message_text(
+                f"✅ Telefon: `{phone}`\n\n"
+                "2️⃣ Mijozning to\u2019liq ismini kiriting:",
+                parse_mode="Markdown"
+            )
+            return NAME
+
+    name = update.message.text.strip()
+    if len(name) < 3:
+        await update.message.reply_text("❌ Ism juda qisqa. Qaytadan kiriting:")
+        return NAME
+    context.user_data["fio"] = name
+    context.user_data["_selected_items"] = []
     await _ask_product(update.message, context)
     return PRODUCT
+
 
 
 # ─── 4. TOVAR (bir nechta tanlash) ──────────────────────────
@@ -177,14 +199,8 @@ async def get_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
-        # Duplicate tasdiqlash
-        if query.data == "dup_no":
-            await query.edit_message_text("❌ Savdo bekor qilindi.")
-            context.user_data.clear()
-            return ConversationHandler.END
-        elif query.data == "dup_yes":
-            context.user_data["awaiting_dup_confirm"] = False
-            await _ask_product(query, context, edit=True)
+        # Duplicate callback endi NAME state da ishlaydi
+        if query.data in ("dup_no", "dup_yes"):
             return PRODUCT
 
         # Tovar tanlash tugaди
