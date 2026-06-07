@@ -135,8 +135,19 @@ def add_sale(sale_data: dict) -> dict:
     import calendar
     if sale_data["payment_type"] == "Haftalik":
         pay_day = int(sale_data.get("pay_day", 0) or 0)
-        if pay_day > 0:
-            # Keyingi to'lov kuniga (haftaning kuni 1=Dushanba) o'tamiz
+
+        # Agar foydalanuvchi aniq sana tanlagan bo'lsa (start_day, start_month, start_year)
+        start_day   = sale_data.get("start_day")
+        start_month = sale_data.get("start_month")
+        start_year  = sale_data.get("start_year")
+
+        if start_day and start_month and start_year:
+            # Aniq tanlangan sana
+            next_payment = date(int(start_year), int(start_month), int(start_day))
+            if pay_day == 0:
+                sale_data["pay_day"] = next_payment.isoweekday()
+        elif pay_day > 0:
+            # Haftaning kuni bo'yicha keyingi sana
             days_ahead = pay_day - today.isoweekday()
             if days_ahead <= 0:
                 days_ahead += 7
@@ -145,14 +156,21 @@ def add_sale(sale_data: dict) -> dict:
             next_payment = today + timedelta(weeks=1)
             sale_data["pay_day"] = next_payment.isoweekday()
     else:
-        pay_day = int(sale_data.get("pay_day", 0) or 0)
+        pay_day     = int(sale_data.get("pay_day", 0) or 0)
+        start_month = sale_data.get("start_month")
+
         if pay_day > 0:
-            next_month = today.month + 1 if today.month < 12 else 1
-            next_year = today.year if today.month < 12 else today.year + 1
-            max_day = calendar.monthrange(next_year, next_month)[1]
-            actual_day = min(pay_day, max_day)
+            # Admin tanlagan oy bo'lsa — o'sha oydan boshlash
+            if start_month:
+                sm = int(start_month)
+                sy = today.year if sm >= today.month else today.year + 1
+            else:
+                sy = today.year if today.month < 12 else today.year + 1
+                sm = today.month + 1 if today.month < 12 else 1
+            max_day      = calendar.monthrange(sy, sm)[1]
+            actual_day   = min(pay_day, max_day)
             from datetime import date as date_cls
-            next_payment = date_cls(next_year, next_month, actual_day)
+            next_payment = date_cls(sy, sm, actual_day)
         else:
             next_payment = today + timedelta(days=30)
     row = [
