@@ -281,7 +281,34 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return REGISTER_PHONE
 
-        save_client_chat_id(phone, chat_id, username, fio=found_rec.get("FIO", ""))
+        # To'g'ridan Mijozlar varag'iga yozish
+        try:
+            from datetime import date as _date
+            ws_mij    = sheets["Mijozlar"]
+            all_rows  = ws_mij.get_all_values()
+            today_str = _date.today().strftime("%d.%m.%Y")
+            phone_norm = phone.replace("+","").replace(" ","").replace("-","")
+            found_row  = None
+
+            for i, row in enumerate(all_rows[1:], start=2):
+                row_phone = str(row[1] if len(row) > 1 else "").replace("+","").replace(" ","").replace("-","")
+                if row_phone == phone_norm:
+                    found_row = i
+                    break
+
+            if found_row:
+                ws_mij.update_cell(found_row, 3, str(chat_id))
+                ws_mij.update_cell(found_row, 4, username or "")
+                ws_mij.update_cell(found_row, 12, today_str)
+                ws_mij.update_cell(found_row, 13, "Ha")
+            else:
+                ws_mij.append_row([
+                    found_rec.get("FIO",""), phone, str(chat_id), username or "",
+                    1, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
+                ])
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Mijozlar ga yozishda xato: {e}")
 
         fio     = found_rec.get("FIO", "")
         tovar   = found_rec.get("Tovar", "")
