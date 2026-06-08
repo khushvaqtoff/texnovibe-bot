@@ -104,13 +104,25 @@ def get_contact_keyboard():
 
 
 def is_registered(chat_id: int) -> dict | None:
-    """Foydalanuvchi ro'yxatdan o'tganmi tekshiradi"""
+    """Foydalanuvchi ro'yxatdan o'tganmi tekshiradi — Mijozlar va Savdolar varag'idan"""
     try:
         sh     = get_spreadsheet()
         sheets = ensure_worksheets(sh)
+
+        # 1. Mijozlar varag'idan
         for rec in ws_to_records(sheets["Mijozlar"]):
             if str(rec.get("Chat ID", "")).strip() == str(chat_id):
                 return rec
+
+        # 2. Savdolar varag'idan (Chat ID ustuni bo'lsa)
+        for rec in ws_to_records(sheets["Savdolar"]):
+            if str(rec.get("Chat ID", "")).strip() == str(chat_id):
+                # Mijozlar formatiga moslashtirish
+                return {
+                    "Chat ID":  str(chat_id),
+                    "Telefon":  rec.get("Telefon", ""),
+                    "FIO":      rec.get("FIO", ""),
+                }
     except Exception:
         pass
     return None
@@ -317,11 +329,21 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
         phone = None
         fio   = None
+
+        # 1. Mijozlar varag'idan qidirish
         for rec in ws_to_records(sheets["Mijozlar"]):
             if str(rec.get("Chat ID", "")).strip() == str(chat_id):
                 phone = str(rec.get("Telefon", ""))
                 fio   = rec.get("FIO", "")
                 break
+
+        # 2. Topilmasa — Savdolar varag'idan qidirish
+        if not phone:
+            for rec in ws_to_records(sheets["Savdolar"]):
+                if str(rec.get("Chat ID", "")).strip() == str(chat_id):
+                    phone = str(rec.get("Telefon", ""))
+                    fio   = rec.get("FIO", "")
+                    break
 
         if not phone:
             await update.message.reply_text(
