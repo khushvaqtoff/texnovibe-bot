@@ -583,24 +583,39 @@ def get_statistics() -> dict:
     }
 
 
-def save_client_chat_id(phone: str, chat_id: int, username: str = ""):
-    sh = get_spreadsheet()
-    sheets = ensure_worksheets(sh)
-    ws = sheets["Mijozlar"]
-    phone_clean = str(phone).replace(" ", "")
+def save_client_chat_id(phone: str, chat_id: int, username: str = "", fio: str = ""):
+    sh        = get_spreadsheet()
+    sheets    = ensure_worksheets(sh)
+    ws        = sheets["Mijozlar"]
     today_str = date.today().strftime("%d.%m.%Y")
 
+    # Telefon normalizatsiya — har xil formatda bo'lishi mumkin
+    phone_norm = normalize_phone(phone)
+
+    # Mavjud qatorni yangilash
     for i, rec in enumerate(ws_to_records(ws), start=2):
-        if str(rec.get("Telefon", "")).replace(" ", "") == phone_clean:
-            ws.update_cell(i, 3, chat_id)
+        rec_phone = normalize_phone(str(rec.get("Telefon", "")))
+        if rec_phone == phone_norm:
+            ws.update_cell(i, 3, str(chat_id))
             ws.update_cell(i, 4, username)
             ws.update_cell(i, 12, today_str)
-            ws.update_cell(i, 13, "Ha")  # Eslatma oladi
+            ws.update_cell(i, 13, "Ha")
             return True
 
-    # Agar bazada yoq bolsa - yangi qator
+    # Savdolar dan FIO ni topish (agar berilmagan bo'lsa)
+    if not fio:
+        try:
+            ws_sales = sheets["Savdolar"]
+            for rec in ws_to_records(ws_sales):
+                if normalize_phone(str(rec.get("Telefon", ""))) == phone_norm:
+                    fio = rec.get("FIO", "")
+                    break
+        except Exception:
+            pass
+
+    # Yangi qator qo'shish — FIO bilan
     ws.append_row([
-        "", phone, chat_id, username,
+        fio, phone, str(chat_id), username,
         0, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
     ])
     return False

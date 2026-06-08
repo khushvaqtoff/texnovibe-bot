@@ -278,7 +278,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return REGISTER_PHONE
 
-        save_client_chat_id(phone, chat_id, username)
+        save_client_chat_id(phone, chat_id, username, fio=found_rec.get("FIO", ""))
 
         fio     = found_rec.get("FIO", "")
         tovar   = found_rec.get("Tovar", "")
