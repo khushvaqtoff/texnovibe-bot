@@ -104,25 +104,34 @@ def get_contact_keyboard():
 
 
 def is_registered(chat_id: int) -> dict | None:
-    """Foydalanuvchi ro'yxatdan o'tganmi tekshiradi — Mijozlar va Savdolar varag'idan"""
+    """Foydalanuvchi ro'yxatdan o'tganmi — barcha usullar bilan tekshiradi"""
     try:
         sh     = get_spreadsheet()
         sheets = ensure_worksheets(sh)
 
-        # 1. Mijozlar varag'idan
-        for rec in ws_to_records(sheets["Mijozlar"]):
-            if str(rec.get("Chat ID", "")).strip() == str(chat_id):
-                return rec
+        # Mijozlar va Savdolar varag'larida qidirish
+        for sheet_name in ["Mijozlar", "Savdolar"]:
+            try:
+                ws      = sheets[sheet_name]
+                all_val = ws.get_all_values()
+                if len(all_val) < 2:
+                    continue
+                headers = all_val[0]
 
-        # 2. Savdolar varag'idan (Chat ID ustuni bo'lsa)
-        for rec in ws_to_records(sheets["Savdolar"]):
-            if str(rec.get("Chat ID", "")).strip() == str(chat_id):
-                # Mijozlar formatiga moslashtirish
-                return {
-                    "Chat ID":  str(chat_id),
-                    "Telefon":  rec.get("Telefon", ""),
-                    "FIO":      rec.get("FIO", ""),
-                }
+                for row in all_val[1:]:
+                    if str(chat_id) not in [str(v).strip() for v in row]:
+                        continue
+                    # chat_id topildi — bu qatordan ma'lumot olish
+                    rec = {}
+                    for hi, h in enumerate(headers):
+                        rec[h] = row[hi] if hi < len(row) else ""
+                    # Standart kalitlarni to'ldirish
+                    phone = rec.get("Telefon", "")
+                    fio   = rec.get("FIO", "")
+                    if phone:
+                        return {"Chat ID": str(chat_id), "Telefon": phone, "FIO": fio}
+            except Exception:
+                continue
     except Exception:
         pass
     return None
@@ -330,20 +339,55 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
         phone = None
         fio   = None
 
-        # 1. Mijozlar varag'idan qidirish
-        for rec in ws_to_records(sheets["Mijozlar"]):
-            if str(rec.get("Chat ID", "")).strip() == str(chat_id):
-                phone = str(rec.get("Telefon", ""))
-                fio   = rec.get("FIO", "")
-                break
+        # Mijozlar varag'idan — get_all_values bilan (header muammosini chetlab o'tish)
+        try:
+            ws_mij  = sheets["Mijozlar"]
+            all_mij = ws_mij.get_all_values()
+            if len(all_mij) > 1:
+                headers = all_mij[0]
+                for row in all_mij[1:]:
+                    # Barcha ustunlarda chat_id qidirish
+                    for val in row:
+                        if str(val).strip() == str(chat_id):
+                            # Bu qatorda telefon va FIO ni topish
+                            for hi, h in enumerate(headers):
+                                if hi < len(row):
+                                    h_lower = h.lower()
+                                    if "telefon" in h_lower or "phone" in h_lower:
+                                        phone = row[hi]
+                                    if "fio" in h_lower or "ism" in h_lower or "name" in h_lower:
+                                        fio = row[hi]
+                            # Agar telefon topilsa — chiqish
+                            if phone:
+                                break
+                    if phone:
+                        break
+        except Exception:
+            pass
 
-        # 2. Topilmasa — Savdolar varag'idan qidirish
+        # Savdolar varag'idan ham qidirish
         if not phone:
-            for rec in ws_to_records(sheets["Savdolar"]):
-                if str(rec.get("Chat ID", "")).strip() == str(chat_id):
-                    phone = str(rec.get("Telefon", ""))
-                    fio   = rec.get("FIO", "")
-                    break
+            try:
+                ws_sav  = sheets["Savdolar"]
+                all_sav = ws_sav.get_all_values()
+                if len(all_sav) > 1:
+                    headers = all_sav[0]
+                    for row in all_sav[1:]:
+                        for val in row:
+                            if str(val).strip() == str(chat_id):
+                                for hi, h in enumerate(headers):
+                                    if hi < len(row):
+                                        h_lower = h.lower()
+                                        if "telefon" in h_lower:
+                                            phone = row[hi]
+                                        if "fio" in h_lower:
+                                            fio = row[hi]
+                                if phone:
+                                    break
+                        if phone:
+                            break
+            except Exception:
+                pass
 
         if not phone:
             await update.message.reply_text(
