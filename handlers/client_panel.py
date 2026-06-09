@@ -309,6 +309,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Mijozlar ga yozishda xato: {e}")
+            await update.message.reply_text(f"⚠️ Saqlashda xato: {str(e)}")
 
         fio     = found_rec.get("FIO", "")
         tovar   = found_rec.get("Tovar", "")
