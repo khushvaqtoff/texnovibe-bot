@@ -284,10 +284,10 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # To'g'ridan Mijozlar varag'iga yozish
         try:
             from datetime import date as _date
-            ws_mij     = sheets["Mijozlar"]
-            all_rows   = ws_mij.get_all_values()
-            today_str  = _date.today().strftime("%d.%m.%Y")
-            found_row  = None
+            ws_mij    = sheets["Mijozlar"]
+            all_rows  = ws_mij.get_all_values()
+            today_str = _date.today().strftime("%d.%m.%Y")
+            found_row = None
 
             for i, row in enumerate(all_rows[1:], start=2):
                 r_phone = str(row[1] if len(row) > 1 else "").replace("+","").replace(" ","").replace("-","")
@@ -299,27 +299,23 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ws_mij.update_cell(found_row, 3, str(chat_id))
                 ws_mij.update_cell(found_row, 4, username or "")
             else:
-                # Yangi qator — faqat asosiy ustunlar
-                fio_val = found_rec.get("FIO", "")
-                ws_mij.append_row([
-                    fio_val, phone, str(chat_id), username or "",
-                    1, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
-                ])
-                # Agar append_row ustun soni tufayli xato bersa — cell update bilan yozish
-        except Exception as e:
-            # append_row ishlamasa — yangi qator cell bilan yozamiz
-            try:
-                from datetime import date as _date
-                ws_mij    = sheets["Mijozlar"]
-                next_row  = len(ws_mij.get_all_values()) + 1
-                ws_mij.update_cell(next_row, 1, found_rec.get("FIO", ""))
+                # Yangi qator — update_cell bilan (append_row 287 ustunda ishlamaydi)
+                next_row = len(all_rows) + 1
+                fio_val  = found_rec.get("FIO", "")
+                ws_mij.update_cell(next_row, 1, fio_val)
                 ws_mij.update_cell(next_row, 2, phone)
                 ws_mij.update_cell(next_row, 3, str(chat_id))
                 ws_mij.update_cell(next_row, 4, username or "")
-            except Exception as e2:
-                import logging
-                logging.getLogger(__name__).error(f"Yozishda xato: {e} | {e2}")
-                await update.message.reply_text(f"⚠️ Saqlashda xato: {str(e2)}")
+                ws_mij.update_cell(next_row, 5, 1)
+                ws_mij.update_cell(next_row, 8, "Bronze")
+                ws_mij.update_cell(next_row, 10, today_str)
+                ws_mij.update_cell(next_row, 12, today_str)
+                ws_mij.update_cell(next_row, 13, "Ha")
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Mijozlar ga yozishda xato: {e}")
+            await update.message.reply_text(f"⚠️ Saqlashda xato: {str(e)}")
 
         fio     = found_rec.get("FIO", "")
         tovar   = found_rec.get("Tovar", "")

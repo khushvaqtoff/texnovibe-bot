@@ -621,11 +621,18 @@ def save_client_chat_id(phone: str, chat_id: int, username: str = "", fio: str =
         except Exception:
             pass
 
-    # Yangi qator
-    ws.append_row([
-        fio or "", phone, str(chat_id), username or "",
-        1, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
-    ])
+    # Yangi qator — update_cell bilan (ustunlar soni muammosini chetlab o'tish)
+    today_str = date.today().strftime("%d.%m.%Y")
+    next_row  = len(all_rows) + 1
+    ws.update_cell(next_row, 1, fio or "")
+    ws.update_cell(next_row, 2, phone)
+    ws.update_cell(next_row, 3, str(chat_id))
+    ws.update_cell(next_row, 4, username or "")
+    ws.update_cell(next_row, 5, 1)
+    ws.update_cell(next_row, 8, "Bronze")
+    ws.update_cell(next_row, 10, today_str)
+    ws.update_cell(next_row, 12, today_str)
+    ws.update_cell(next_row, 13, "Ha")
     return False
 
 
