@@ -287,37 +287,39 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ws_mij     = sheets["Mijozlar"]
             all_rows   = ws_mij.get_all_values()
             today_str  = _date.today().strftime("%d.%m.%Y")
-            phone_norm = phone_clean  # allaqachon tozalangan: raqamlar only
             found_row  = None
 
             for i, row in enumerate(all_rows[1:], start=2):
                 r_phone = str(row[1] if len(row) > 1 else "").replace("+","").replace(" ","").replace("-","")
-                if r_phone == phone_norm:
+                if r_phone == phone_clean:
                     found_row = i
                     break
 
             if found_row:
-                # Mavjud qatorni yangilash
                 ws_mij.update_cell(found_row, 3, str(chat_id))
                 ws_mij.update_cell(found_row, 4, username or "")
-                ws_mij.update_cell(found_row, 12, today_str)
-                ws_mij.update_cell(found_row, 13, "Ha")
             else:
-                # Yangi qator qo'shish — FIO, Telefon, Chat ID
+                # Yangi qator — faqat asosiy ustunlar
+                fio_val = found_rec.get("FIO", "")
                 ws_mij.append_row([
-                    found_rec.get("FIO", ""),
-                    phone,
-                    str(chat_id),
-                    username or "",
-                    1, 0, 0, "Bronze", "",
-                    today_str, "",
-                    today_str, "Ha"
+                    fio_val, phone, str(chat_id), username or "",
+                    1, 0, 0, "Bronze", "", today_str, "", today_str, "Ha"
                 ])
-
+                # Agar append_row ustun soni tufayli xato bersa — cell update bilan yozish
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Mijozlar ga yozishda xato: {e}")
-            await update.message.reply_text(f"⚠️ Saqlashda xato: {str(e)}")
+            # append_row ishlamasa — yangi qator cell bilan yozamiz
+            try:
+                from datetime import date as _date
+                ws_mij    = sheets["Mijozlar"]
+                next_row  = len(ws_mij.get_all_values()) + 1
+                ws_mij.update_cell(next_row, 1, found_rec.get("FIO", ""))
+                ws_mij.update_cell(next_row, 2, phone)
+                ws_mij.update_cell(next_row, 3, str(chat_id))
+                ws_mij.update_cell(next_row, 4, username or "")
+            except Exception as e2:
+                import logging
+                logging.getLogger(__name__).error(f"Yozishda xato: {e} | {e2}")
+                await update.message.reply_text(f"⚠️ Saqlashda xato: {str(e2)}")
 
         fio     = found_rec.get("FIO", "")
         tovar   = found_rec.get("Tovar", "")
