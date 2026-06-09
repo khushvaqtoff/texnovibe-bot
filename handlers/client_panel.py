@@ -86,6 +86,7 @@ def format_money(amount) -> str:
 def get_client_keyboard():
     keyboard = [
         [KeyboardButton("📊 Mening Nasiyam")],
+        [KeyboardButton("💳 To'lovlarim")],
         [KeyboardButton("📝 Ro'yxatdan O'tish")],
         [KeyboardButton("🛍 Katalog")],
         [KeyboardButton("🛒 Buyurtma Berish")],
@@ -514,3 +515,121 @@ async def cmd_mening_malumotlarim(update: Update, context: ContextTypes.DEFAULT_
 
     except Exception as e:
         await update.message.reply_text(f"❌ Xatolik: `{str(e)}`", parse_mode="Markdown")
+
+
+async def cmd_tolovlarim(update, context):
+    """Mijozning har bir aktiv savdosi uchun to'lovlar tarixi"""
+    chat_id = update.effective_user.id
+
+    try:
+        sh     = get_spreadsheet()
+        sheets = ensure_worksheets(sh)
+
+        # chat_id bo'yicha telefon topish
+        phone = None
+        fio   = None
+        for sheet_name in ["Mijozlar", "Savdolar"]:
+            try:
+                all_val = sheets[sheet_name].get_all_values()
+                if len(all_val) < 2:
+                    continue
+                headers = [h.strip() for h in all_val[0]]
+                for row in all_val[1:]:
+                    row_vals = [str(v).strip() for v in row]
+                    if str(chat_id) in row_vals:
+                        rec   = dict(zip(headers, row_vals))
+                        phone = rec.get("Telefon", "").replace(" ", "")
+                        fio   = rec.get("FIO", "")
+                        if phone:
+                            break
+            except Exception:
+                continue
+            if phone:
+                break
+
+        if not phone:
+            await update.message.reply_text(
+                "❌ Siz hali ro'yxatdan o'tmagansiz!",
+                reply_markup=get_client_keyboard()
+            )
+            return
+
+        phone_clean = phone.replace("+","").replace(" ","").replace("-","")
+
+        # Faol savdolarni olish
+        all_sales   = sheets["Savdolar"].get_all_values()
+        sale_headers = [h.strip() for h in all_sales[0]] if all_sales else []
+        faol_savdolar = []
+        for row in all_sales[1:]:
+            rec = dict(zip(sale_headers, row))
+            r_phone = rec.get("Telefon","").replace("+","").replace(" ","").replace("-","")
+            if r_phone == phone_clean and rec.get("Holat","").strip() == "Faol":
+                faol_savdolar.append(rec)
+
+        if not faol_savdolar:
+            await update.message.reply_text(
+                f"👤 *{fio}*\n\n📋 Faol nasiya yo'q.",
+                parse_mode="Markdown",
+                reply_markup=get_client_keyboard()
+            )
+            return
+
+        # To'lovlar varag'idan olish
+        all_pays    = sheets["Tolovlar"].get_all_values()
+        pay_headers = [h.strip() for h in all_pays[0]] if all_pays else []
+        barcha_pays = []
+        for row in all_pays[1:]:
+            rec = dict(zip(pay_headers, row))
+            r_phone = rec.get("Telefon","").replace("+","").replace(" ","").replace("-","")
+            if r_phone == phone_clean:
+                barcha_pays.append(rec)
+
+        # Har bir faol savdo uchun to'lovlarni ko'rsatish
+        await update.message.reply_text(
+            f"👤 *{fio}* — To'lovlar tarixi",
+            parse_mode="Markdown"
+        )
+
+        for savdo in faol_savdolar:
+            savdo_id  = savdo.get("ID","")
+            tovar     = savdo.get("Tovar","")
+            jami      = format_money(savdo.get("Jami Summa", 0))
+            qoldiq    = format_money(savdo.get("Qoldiq", 0))
+            oylik     = format_money(savdo.get("To'lov Summasi", 0))
+            keyingi   = savdo.get("Keyingi To'lov Sanasi","")
+            tolangan  = format_money(savdo.get("To'langan Summa", 0))
+
+            # Bu savdoning to'lovlari
+            savdo_pays = [
+                p for p in barcha_pays
+                if str(p.get("Savdo ID","")).strip() == str(savdo_id)
+            ]
+
+            text = (
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🛍 *{tovar}*\n"
+                f"🆔 {savdo_id}\n"
+                f"💵 Jami: *{jami} so'm*\n"
+                f"✅ To'langan: *{tolangan} so'm*\n"
+                f"💰 Qoldiq: *{qoldiq} so'm*\n"
+                f"💳 Keyingi: *{oylik} so'm* | {keyingi}\n"
+            )
+
+            if savdo_pays:
+                text += f"\n📋 *To'lovlar ({len(savdo_pays)} ta):*\n"
+                for i, p in enumerate(savdo_pays[-10:], 1):
+                    sana  = p.get("To'lov Sanasi","")
+                    summa = format_money(p.get("To'lov Summasi", 0))
+                    qold  = format_money(p.get("Qoldiq", 0))
+                    text += f"{i}. {sana} — *{summa} so'm* (qoldiq: {qold})\n"
+                if len(savdo_pays) > 10:
+                    text += f"_... va yana {len(savdo_pays)-10} ta to'lov_\n"
+                jami_tolangan = sum(safe_float(p.get("To'lov Summasi",0)) for p in savdo_pays)
+                text += f"\n✅ Jami to'langan: *{format_money(jami_tolangan)} so'm*"
+            else:
+                text += "\n📋 Hali to'lov yo'q"
+
+            await update.message.reply_text(text, parse_mode="Markdown")
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Xatolik: {str(e)}")

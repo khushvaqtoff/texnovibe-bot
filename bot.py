@@ -38,7 +38,7 @@ from handlers.cancel_sale_handler import (
     CANCEL_SEARCH, CANCEL_SELECT, CANCEL_CONFIRM
 )
 from handlers.client_panel import (
-    cmd_mening_malumotlarim, cmd_register,
+    cmd_mening_malumotlarim, cmd_register, cmd_tolovlarim,
     start_register, register_phone, cancel_register,
     REGISTER_PHONE
 )
@@ -414,6 +414,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🛒 Buyurtmalar$"),        cmd_orders))
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"),         cmd_start))
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"),     cmd_mening_malumotlarim))
+    app.add_handler(MessageHandler(filters.Regex("^💳 To'lovlarim$"),          cmd_tolovlarim))
 
     app.add_handler(CommandHandler("register",            cmd_register))
     app.add_handler(CommandHandler("tarix",               cmd_history))
