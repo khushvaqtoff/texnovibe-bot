@@ -81,6 +81,7 @@ def get_admin_keyboard():
         [KeyboardButton("📦 Tovar Qoshish"),      KeyboardButton("🛍 Katalog")],
         [KeyboardButton("🛒 Buyurtmalar"),        KeyboardButton("👥 Mijozlar Bazasi")],
         [KeyboardButton("📈 Bugungi Hisobot"),    KeyboardButton("🏭 Ombor Nazorati")],
+        [KeyboardButton("📢 Xabar Yuborish")],
         [KeyboardButton("🏠 Bosh Menyu")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -389,6 +390,7 @@ def main():
         conversation_timeout=120,
     )
 
+    app.add_handler(broadcast_conv)
     app.add_handler(register_conv)
     app.add_handler(catalog_add_conv)
     app.add_handler(order_conv)
