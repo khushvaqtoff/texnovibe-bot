@@ -8,7 +8,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from sheets.google_sheets import get_spreadsheet, ensure_worksheets, ws_to_records
+from sheets.google_sheets import get_spreadsheet
 
 logger = logging.getLogger(__name__)
 
@@ -27,29 +27,25 @@ def get_all_client_chat_ids() -> list[dict]:
     """Barcha ro'yxatdan o'tgan mijozlarning chat_id larini qaytaradi"""
     try:
         sh      = get_spreadsheet()
-        sheets  = ensure_worksheets(sh)
-        all_val = sheets["Mijozlar"].get_all_values()
+        ws      = sh.worksheet("Mijozlar")
+        all_val = ws.get_all_values()
         if len(all_val) < 2:
             return []
 
         headers = [h.strip() for h in all_val[0]]
 
         # Chat ID ustun indeksini topish
-        chat_id_idx = None
+        chat_id_idx = 2  # default C ustun
         fio_idx     = 0
         phone_idx   = 1
         for i, h in enumerate(headers):
             h_lower = h.lower().replace(" ", "").replace("_", "")
             if "chatid" in h_lower or "chat" in h_lower:
                 chat_id_idx = i
-            if "fio" in h_lower or "ism" in h_lower:
+            if h_lower == "fio":
                 fio_idx = i
-            if "telefon" in h_lower or "phone" in h_lower:
+            if "telefon" in h_lower:
                 phone_idx = i
-
-        # Topilmasa 3-ustun (C) — standart joylashuv
-        if chat_id_idx is None:
-            chat_id_idx = 2
 
         result = []
         for row in all_val[1:]:
@@ -71,7 +67,12 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_CHAT_ID:
         return ConversationHandler.END
 
-    clients = get_all_client_chat_ids()
+    try:
+        clients = get_all_client_chat_ids()
+    except Exception as e:
+        await update.message.reply_text(f"❌ Xato: {str(e)}")
+        return ConversationHandler.END
+
     await update.message.reply_text(
         f"📢 *Barcha Mijozlarga Xabar Yuborish*\n\n"
         f"👥 Telegram ulangan mijozlar: *{len(clients)} ta*\n\n"
