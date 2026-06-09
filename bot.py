@@ -52,6 +52,10 @@ from handlers.order_handler import (
     start_order, order_select, order_workplace, order_confirm, cancel_order,
     cmd_orders, order_done_callback, ORDER_SELECT, ORDER_WORKPLACE, ORDER_CONFIRM
 )
+from handlers.broadcast_handler import (
+    start_broadcast, broadcast_get_text, broadcast_confirm, broadcast_cancel,
+    BROADCAST_TEXT
+)
 from scheduler.reminder import setup_scheduler
 
 load_dotenv()
@@ -191,7 +195,6 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     payment_conv = ConversationHandler(
@@ -226,7 +229,6 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     cancel_sale_conv = ConversationHandler(
@@ -256,7 +258,6 @@ def main():
             MessageHandler(home_filter, cancel_cmd),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     auction_conv = ConversationHandler(
@@ -283,7 +284,6 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     register_conv = ConversationHandler(
@@ -304,7 +304,6 @@ def main():
             MessageHandler(home_filter, cancel_register),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     catalog_add_conv = ConversationHandler(
@@ -346,7 +345,6 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     order_conv = ConversationHandler(
@@ -374,7 +372,6 @@ def main():
             MessageHandler(home_filter, cancel_order),
         ],
         conversation_timeout=300,
-        per_message=False,
     )
 
     search_conv = ConversationHandler(
@@ -395,6 +392,25 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=120,
+    )
+
+    # ── BROADCAST ──────────────────────────────────────────
+    broadcast_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^📢 Xabar Yuborish$"), start_broadcast),
+        ],
+        states={
+            BROADCAST_TEXT: [
+                MessageHandler(home_filter, broadcast_cancel),
+                CallbackQueryHandler(broadcast_confirm, pattern="^broadcast_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_get_text),
+            ],
+        },
+        fallbacks=[
+            MessageHandler(home_filter, broadcast_cancel),
+            CommandHandler("bekor", broadcast_cancel),
+        ],
+        conversation_timeout=300,
     )
 
     app.add_handler(broadcast_conv)
@@ -423,6 +439,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🛒 Buyurtmalar$"),        cmd_orders))
     app.add_handler(MessageHandler(filters.Regex("^🏠 Bosh Menyu$"),         cmd_start))
     app.add_handler(MessageHandler(filters.Regex("^📊 Mening Nasiyam$"),     cmd_mening_malumotlarim))
+    app.add_handler(MessageHandler(filters.Regex("^💳 To'lovlarim$"),          cmd_tolovlarim))
     app.add_handler(MessageHandler(filters.Regex("^💳 To'lovlarim$"),          cmd_tolovlarim))
 
     app.add_handler(CommandHandler("register",            cmd_register))
