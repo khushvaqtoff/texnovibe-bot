@@ -191,6 +191,7 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     payment_conv = ConversationHandler(
@@ -225,6 +226,7 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     cancel_sale_conv = ConversationHandler(
@@ -254,6 +256,7 @@ def main():
             MessageHandler(home_filter, cancel_cmd),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     auction_conv = ConversationHandler(
@@ -280,6 +283,7 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     register_conv = ConversationHandler(
@@ -300,6 +304,7 @@ def main():
             MessageHandler(home_filter, cancel_register),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     catalog_add_conv = ConversationHandler(
@@ -341,6 +346,7 @@ def main():
             MessageHandler(home_filter, cancel),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     order_conv = ConversationHandler(
@@ -368,6 +374,7 @@ def main():
             MessageHandler(home_filter, cancel_order),
         ],
         conversation_timeout=300,
+        per_message=False,
     )
 
     search_conv = ConversationHandler(
