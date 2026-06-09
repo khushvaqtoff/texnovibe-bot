@@ -31,14 +31,34 @@ def get_all_client_chat_ids() -> list[dict]:
         all_val = sheets["Mijozlar"].get_all_values()
         if len(all_val) < 2:
             return []
+
         headers = [h.strip() for h in all_val[0]]
-        result  = []
+
+        # Chat ID ustun indeksini topish
+        chat_id_idx = None
+        fio_idx     = 0
+        phone_idx   = 1
+        for i, h in enumerate(headers):
+            h_lower = h.lower().replace(" ", "").replace("_", "")
+            if "chatid" in h_lower or "chat" in h_lower:
+                chat_id_idx = i
+            if "fio" in h_lower or "ism" in h_lower:
+                fio_idx = i
+            if "telefon" in h_lower or "phone" in h_lower:
+                phone_idx = i
+
+        # Topilmasa 3-ustun (C) — standart joylashuv
+        if chat_id_idx is None:
+            chat_id_idx = 2
+
+        result = []
         for row in all_val[1:]:
-            rec      = dict(zip(headers, row))
-            chat_id  = str(rec.get("Chat ID", "")).strip()
-            fio      = rec.get("FIO", "")
-            phone    = rec.get("Telefon", "")
-            if chat_id and chat_id.isdigit():
+            if len(row) <= chat_id_idx:
+                continue
+            chat_id = str(row[chat_id_idx]).strip()
+            fio     = str(row[fio_idx]).strip()   if len(row) > fio_idx   else ""
+            phone   = str(row[phone_idx]).strip() if len(row) > phone_idx else ""
+            if chat_id and chat_id.isdigit() and int(chat_id) > 0:
                 result.append({"chat_id": int(chat_id), "fio": fio, "phone": phone})
         return result
     except Exception as e:
