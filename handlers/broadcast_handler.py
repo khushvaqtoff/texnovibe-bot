@@ -59,7 +59,8 @@ def get_all_client_chat_ids() -> list[dict]:
         return result
     except Exception as e:
         logger.error(f"Chat ID larni olishda xato: {e}")
-        return []
+        # Xatoni start_broadcast ga ham uzatish
+        raise e
 
 
 # ─── BOSHLASH ───────────────────────────────────────────────
@@ -69,6 +70,7 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         clients = get_all_client_chat_ids()
+        context.user_data["broadcast_clients"] = clients
     except Exception as e:
         await update.message.reply_text(f"❌ Xato: {str(e)}")
         return ConversationHandler.END
@@ -91,7 +93,8 @@ async def broadcast_get_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = update.message.text.strip()
     context.user_data["broadcast_text"] = text
 
-    clients = get_all_client_chat_ids()
+    clients = context.user_data.get("broadcast_clients") or get_all_client_chat_ids()
+    context.user_data["broadcast_clients"] = clients
 
     keyboard = [[
         InlineKeyboardButton(
@@ -125,7 +128,7 @@ async def broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     text    = context.user_data.get("broadcast_text", "")
-    clients = get_all_client_chat_ids()
+    clients = context.user_data.get("broadcast_clients") or get_all_client_chat_ids()
 
     if not clients:
         await query.edit_message_text("❌ Telegram ulangan mijoz yo'q.")
